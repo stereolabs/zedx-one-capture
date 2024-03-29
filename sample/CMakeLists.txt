@@ -23,8 +23,11 @@ add_definitions(-std=c++14 -O3)
 IF (BUILD_WITH_DEBUGINFOS)
     message("!! Building with -g !!")
     add_definitions(-g)
+    set(ARGUS_LIB arguscaptured)
+ELSE()
+    set(ARGUS_LIB arguscapture)
 ENDIF()
 
 add_executable(argus_camera main.cpp)
-target_link_libraries(argus_camera arguscapture pthread ${OpenCV_LIBRARIES} ${TegraMM_LIBRARIES})
+target_link_libraries(argus_camera ${ARGUS_LIB} pthread ${OpenCV_LIBRARIES} ${TegraMM_LIBRARIES})
 

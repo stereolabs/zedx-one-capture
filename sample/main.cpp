@@ -25,8 +25,14 @@ int main(int argc, char *argv[])
   }
   std::cout<<"***********************"<<std::endl;
 
+  uint8_t cam_id = 0;
+  if(argc>1) 
+  {
+    cam_id = atoi(argv[1]);
+  }
+
   oc::ArgusCameraConfig config;
-  config.mDeviceId = atoi(argv[1]);
+  config.mDeviceId = argc;
   config.mFPS= 15;
   config.mWidth = 3856;
   config.mHeight = 2180;//1536;
