@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.5)
 project(argus_camera)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 find_package(OpenCV REQUIRED)
 include_directories(${OPENCV_INCLUDE_DIRS})
 link_directories(${OpenCV_LIBRARY_DIRS})

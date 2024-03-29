@@ -2,8 +2,8 @@
 #include <time.h>
 #include <unistd.h>
 #include <atomic>
-#include "ArgusCapture.hpp"
-#include "opencv2/opencv.hpp"
+#include <ArgusCapture.hpp>
+#include <opencv2/opencv.hpp>
 
 
 
