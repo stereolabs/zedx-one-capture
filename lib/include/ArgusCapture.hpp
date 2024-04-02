@@ -139,6 +139,83 @@ enum class ARGUS_STATE {
     UNKNOWN
 };
 
+inline std::string ARGUS_STATE2str(oc::ARGUS_STATE state) {  
+    std::string out;
+    switch (state) {
+        case oc::ARGUS_STATE::OK:
+            out = "OK";
+            break;
+        case oc::ARGUS_STATE::ALREADY_OPEN:
+                    out = "ALREADY_OPEN";
+            break;
+        case oc::ARGUS_STATE::I2C_COMM_FAILED:
+                    out = "I2C_COMM_FAILED";
+            break;
+        case oc::ARGUS_STATE::INVALID_CAMERA_PROVIDER:
+                    out = "INVALID_CAMERA_PROVIDER";
+            break;
+        case oc::ARGUS_STATE::INVALID_DEVICE_ENUMERATION:
+                    out = "INVALID_DEVICE_ENUMERATION";
+            break;
+        case oc::ARGUS_STATE::NO_CAMERA_AVAILABLE:
+                    out = "NO_CAMERA_AVAILABLE";
+            break;
+        case oc::ARGUS_STATE::INVALID_CAMERA_PROPERTIES:
+                    out = "INVALID_CAMERA_PROPERTIES";
+            break;
+        case oc::ARGUS_STATE::INVALID_CAMERA_SN:
+                    out = "INVALID_CAMERA_SN";
+            break;
+        case oc::ARGUS_STATE::INVALID_CAPTURE_SESSION:
+                    out = "INVALID_CAPTURE_SESSION";
+            break;
+        case oc::ARGUS_STATE::INVALID_OUTPUT_STREAM_SETTINGS:
+                    out = "INVALID_OUTPUT_STREAM_SETTINGS";
+            break;
+        case oc::ARGUS_STATE::INVALID_STREAM_CREATION:
+                    out = "INVALID_STREAM_CREATION";
+            break;
+        case oc::ARGUS_STATE::INVALID_FRAME_CONSUMER:
+                    out = "INVALID_FRAME_CONSUMER";
+            break;
+        case oc::ARGUS_STATE::INVALID_CAPTURE_REQUEST:
+                    out = "INVALID_CAPTURE_REQUEST";
+            break;
+        case oc::ARGUS_STATE::INVALID_OUTPUT_STREAM_REQUEST:
+                    out = "INVALID_OUTPUT_STREAM_REQUEST";
+            break;
+        case oc::ARGUS_STATE::INVALID_SOURCE_CONFIGURATION:
+                    out = "INVALID_SOURCE_CONFIGURATION";
+            break;
+        case oc::ARGUS_STATE::CANNOT_START_STREAM_REQUEST:
+                    out = "CANNOT_START_STREAM_REQUEST";
+            break;
+        case oc::ARGUS_STATE::CONNECTION_TIMEOUT:
+                    out = "CONNECTION_TIMEOUT";
+            break;
+        case oc::ARGUS_STATE::CAPTURE_TIMEOUT:
+                    out = "CAPTURE_TIMEOUT";
+            break;
+        case oc::ARGUS_STATE::CAPTURE_FAILURE:
+                    out = "CAPTURE_FAILURE";
+            break;
+        case oc::ARGUS_STATE::CAPTURE_UNSYNC:
+                    out = "CAPTURE_UNSYNC";
+            break;
+        case oc::ARGUS_STATE::CAPTURE_CONVERT_FAILURE:
+                    out = "CAPTURE_CONVERT_FAILURE";
+            break;
+        case oc::ARGUS_STATE::UNSUPPORTED_FCT:
+                    out = "UNSUPPORTED_FCT";
+            break;
+        case oc::ARGUS_STATE::UNKNOWN:
+                    out = "UNKNOWN";
+            break;
+    };
+
+    return out;
+}
+
 
 enum class AEANTIBANDING
 {

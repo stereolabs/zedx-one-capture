@@ -19,7 +19,7 @@ int main(int argc, char *argv[]) {
     std::cout << " Argus Capture Version : " << major << "." << minor << "." << patch << std::endl;
 
 
-    std::vector<oc::ArgusDevice> devs = oc::ArgusV4l2Capture::getV4l2Devices();
+    std::vector<oc::ArgusDevice> devs = oc::ArgusBayerCapture::getArgusDevices();
     for (int i = 0; i < devs.size(); i++) {
         std::cout << "##################" << std::endl;
         std::cout << " Device : " << devs.at(i).id << std::endl;
@@ -30,17 +30,26 @@ int main(int argc, char *argv[]) {
     std::cout << "***********************" << std::endl;
 
     oc::ArgusCameraConfig config;
+
+    if(devs.size() >= 2) {
+        if(devs.at(camera_id_0).badge == "zedx_imx678") {
+            std::cout << "ZED One 4K detected!" << std::endl;
+            config.mFPS = 15;
+            config.mWidth = 3856;
+            config.mHeight = 2180; 
+        } else if(devs.at(camera_id_0).badge == "zedx_ar0234") {
+            std::cout << "ZED One GS detected!" << std::endl;
+            config.mFPS = 30;
+            config.mWidth = 1920;
+            config.mHeight = 1200; 
+        }
+
+    } else {
+        std::cerr << "No cameras detected" << std::endl;
+        return -1;
+    }
+
     config.mDeviceId = (camera_id_0);
-    // for 4K 
-#if 0
-    config.mFPS = 15;
-    config.mWidth = 3856;
-    config.mHeight = 2180;
-#else
-    config.mFPS = 30;
-    config.mWidth = 1920;
-    config.mHeight = 1200;
-#endif
     config.verbose_level = 3;
 
     oc::ArgusCameraConfig config_1;
@@ -56,12 +65,12 @@ int main(int argc, char *argv[]) {
 
 
     if (state != oc::ARGUS_STATE::OK) {
-        printf("res %d\n", (int) state);
+        std::cerr << "Failed to open Camera, error code " << ARGUS_STATE2str(state) << std::endl;
         return -1;
     }
 
     if (state_isx031 != oc::ARGUS_STATE::OK) {
-        printf("res %d\n", (int) state_isx031);
+        std::cerr << "Failed to open Camera, error code " << ARGUS_STATE2str(state) << std::endl;
         return -1;
     }
 
