@@ -1004,7 +1004,7 @@ int ArgusBayerCapture::setFrameExposureRange(uint64_t exp_low,uint64_t exp_high)
             }
         }
     }
-
+  dispatchRequest();
   return (int)status;
 }
 
@@ -1109,9 +1109,11 @@ int ArgusBayerCapture::setAnalogFrameGainRange(float gain_low,float gain_high)
               analog_gain_current_range.second=gain_high;
             }
         }
+
+      status = isrcSettings->setGainRange(Range<float>(gain_low,gain_high));
+      dispatchRequest();
     }
-  status = isrcSettings->setGainRange(Range<float>(gain_low,gain_high));
-  return (int)status;
+    return (int)status;
 }
 
 int ArgusBayerCapture::getAnalogFrameGainRange(float& sgain_low,float& sgain_high)
@@ -1204,7 +1206,9 @@ int ArgusBayerCapture::setDigitalFrameGainRange(float gain_low, float gain_high)
               digital_gain_current_range.second = gain_high;
             }
         }
+        dispatchRequest();
     }
+
   return (int)status;
 }
 
@@ -1271,6 +1275,7 @@ int ArgusBayerCapture::setManualWhiteBalance(uint32_t color_temperature_)
       status = ac->setWbGains(bayerGains);
       status =ac->setAwbMode(AWB_MODE_MANUAL);
       mAutoWhiteBalanceSetting = 0;
+      dispatchRequest();
     }
   return (int)status;
 }
@@ -1323,6 +1328,7 @@ int ArgusBayerCapture::setAutomaticWhiteBalance(int val)
           break;
         }
       mAutoWhiteBalanceSetting=val;
+      dispatchRequest();
     }
 
   return (int)status;
@@ -1354,6 +1360,7 @@ int ArgusBayerCapture::setSharpening(float value)
       clamp<float>(value,0,1.0);
       iEdgeEnhanceSettings->setEdgeEnhanceMode(Argus::EDGE_ENHANCE_MODE_HIGH_QUALITY);
       iEdgeEnhanceSettings->setEdgeEnhanceStrength(value);
+      dispatchRequest();
     }
   return (int)status;
 }
@@ -1386,6 +1393,7 @@ int ArgusBayerCapture::setColorSaturation(float saturation)
       ac->setColorSaturationEnable(true);
       clamp<float>(saturation,0.f,2.f);
       ac->setColorSaturation(saturation);
+      dispatchRequest();
     }
   return (int)status;
 }
@@ -1553,6 +1561,7 @@ int ArgusBayerCapture::setToneMappingFromGamma(int channel, float gamma)
       status = ac->setToneMapCurveEnable(true);
       status = ac->setToneMapCurve(static_cast<RGBChannel>(channel), default_tone_mapping_lut_red);
       current_gamma = gamma;
+      dispatchRequest();
     }
 
   return (int)status;
@@ -1586,8 +1595,9 @@ int ArgusBayerCapture::setROIforAECAGC(oc::Rect roi)
 
       aec_region.push_back(region);
       status = ac->setAeRegions(aec_region);
+      dispatchRequest();
     }
-  dispatchRequest();
+
   return (int)status;
 }
 
@@ -1603,8 +1613,9 @@ int ArgusBayerCapture::resetROIforAECAGC()
       vector<AcRegion> aec_region;
       //Set an empty vector clears the regions
       status = ac->setAeRegions(aec_region);
+      dispatchRequest();
     }
-  dispatchRequest();
+
   return (int)status;
 }
 
@@ -1626,8 +1637,10 @@ int ArgusBayerCapture::getROIforAECAGC(oc::Rect &roi)
         }
       else
         status = Argus::STATUS_INVALID_PARAMS;
+
+        dispatchRequest();
     }
-  dispatchRequest();
+
   return (int)status;
 }
 
