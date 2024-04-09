@@ -1502,7 +1502,7 @@ int ArgusBayerCapture::setDenoisingValue(float value)
   return (int)status;
 }
 
-float ArgusBayerCapture::getDenoisingValue(int side)
+float ArgusBayerCapture::getDenoisingValue()
 {
   if (!opened_)
     return -1;
