@@ -62,33 +62,40 @@ int main(int argc, char *argv[]) {
 
     char key = ' ';
     int image_count = 0;
+    float min_gain, max_gain;
     while (key != 'q') {
-        if (camera_0.isNewFrame()) {
-            memcpy(rgb_cam0.data, camera_0.getPixels(), camera_0.getWidth() * camera_0.getHeight() * camera_0.getNumberOfChannels());
-            std::cout<<" TS : "<< camera_0.getImageTimestampinUs() <<std::endl;
+      if (camera_0.isNewFrame()) {
+        memcpy(rgb_cam0.data, camera_0.getPixels(),
+               camera_0.getWidth() * camera_0.getHeight() *
+                   camera_0.getNumberOfChannels());
+        std::cout << " TS : " << camera_0.getImageTimestampinUs() << std::endl;
 
+        /// Only with argus ///
+        std::cout << " Exposure Time : " << camera_0.getFrameExposureTime()
+                  << " us" << std::endl;
+        std::cout << " Analog Gain : " << camera_0.getAnalogFrameGain() << " dB"
+                  << std::endl;
+        camera_0.getAnalogGainLimits(min_gain, max_gain);
+        std::cout << "   * Range : [" << min_gain << "," << max_gain << "] dB"
+                  << std::endl;
+        std::cout << " Digital Gain : " << camera_0.getDigitalFrameGain()
+                  << std::endl;
+        ///////////////////
 
-            ///Only with argus ///
-            std::cout<<" Exposure Time : "<<camera_0.getFrameExposureTime()<<" us"<<std::endl;
-            std::cout<<" Analog Gain : "<<camera_0.getAnalogFrameGain()<<" dB"<<std::endl;
-            std::cout<<" Digital Gain : "<<camera_0.getDigitalFrameGain()<<std::endl;
-            ///////////////////
+        cv::resize(rgb_cam0, rgb_d, cv::Size(1280, 720));
 
-            cv::resize(rgb_cam0, rgb_d, cv::Size(1280, 720));
+        cv::imshow("image", rgb_d);
+        key = cv::waitKey(2);
 
-            cv::imshow("image", rgb_d);
-            key = cv::waitKey(2);
-
-            if (key == 's') {
-                // saves the images
-                cv::imwrite("image_left_" + std::to_string(image_count) + ".png", rgb_cam0);
-                std::cout << "images created." << std::endl;
-                image_count++;
-            }
-        } else
-            usleep(100);
-
-
+        if (key == 's') {
+          // saves the images
+          cv::imwrite("image_left_" + std::to_string(image_count) + ".png",
+                      rgb_cam0);
+          std::cout << "images created." << std::endl;
+          image_count++;
+        }
+      } else
+        usleep(100);
     }
     camera_0.closeCamera();
 
