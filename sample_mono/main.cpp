@@ -62,7 +62,6 @@ int main(int argc, char *argv[]) {
 
     char key = ' ';
     int image_count = 0;
-    float min_gain, max_gain;
     while (key != 'q') {
       if (camera_0.isNewFrame()) {
         memcpy(rgb_cam0.data, camera_0.getPixels(),
@@ -74,10 +73,7 @@ int main(int argc, char *argv[]) {
         std::cout << " Exposure Time : " << camera_0.getFrameExposureTime()
                   << " us" << std::endl;
         std::cout << " Analog Gain : " << camera_0.getAnalogFrameGain() << " dB"
-                  << std::endl;
-        camera_0.getAnalogGainLimits(min_gain, max_gain);
-        std::cout << "   * Range : [" << min_gain << "," << max_gain << "] dB"
-                  << std::endl;
+                  << std::endl;        
         std::cout << " Digital Gain : " << camera_0.getDigitalFrameGain()
                   << std::endl;
         ///////////////////

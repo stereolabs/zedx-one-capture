@@ -1156,7 +1156,7 @@ int ArgusBayerCapture::setManualAnalogGainReal(float db) {
   if (!opened_)
     return -1;
 
-  return setAnalogFrameGainRange((float)db/1000.f,(float)db/1000.f);
+  return setAnalogFrameGainRange(db,db);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
