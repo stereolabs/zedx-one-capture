@@ -323,15 +323,28 @@ ARGUS_STATE ArgusBayerCapture::openCamera(const ArgusCameraConfig &config,bool r
   // 1. Get sensor mode
   iCameraProperties = interface_cast<ICameraProperties>(h->cameraDevice);
   status = iCameraProperties->getAllSensorModes(&sensorModes);
-  if (Argus::STATUS_OK != status) {
+  if (Argus::STATUS_OK != status || sensorModes.empty()) {
       ArgusProvider::changeState(mPort,ARGUS_CAMERA_STATE::OFF);
       return ARGUS_STATE::INVALID_SOURCE_CONFIGURATION;
     }
 
 
-  //2. Find sensor mode according to width/height
+  //2. Find sensor mode according to width/height. If width or height = 0, choose the first / default sensor mode
   int m_sensor_mode = -1;
-  for (int k=0;k<sensorModes.size();k++)
+  if (mConfig.mWidth==0 || mConfig.mHeight == 0)
+  {
+      //Take the first sensor mode
+      m_sensor_mode = 0;
+      ISensorMode* ssmode = Argus::interface_cast<Argus::ISensorMode>(sensorModes[m_sensor_mode]);
+      mConfig.mWidth = ssmode->getResolution().width();
+      mConfig.mHeight = ssmode->getResolution().height();
+      if (mConfig.mFPS==0)
+          mConfig.mFPS = ONE_SECOND_NANOS/ssmode->getFrameDurationRange().min();
+
+  }
+  else
+  {
+    for (int k=0;k<sensorModes.size();k++)
     {
       ISensorMode* ssmode = Argus::interface_cast<Argus::ISensorMode>(sensorModes[k]);
       int s_width = ssmode->getResolution().width();
@@ -339,16 +352,12 @@ ARGUS_STATE ArgusBayerCapture::openCamera(const ArgusCameraConfig &config,bool r
       if (mConfig.mWidth==s_width && mConfig.mHeight == s_height)
         {
           m_sensor_mode = k;
+          if (mConfig.mFPS==0)
+              mConfig.mFPS = ONE_SECOND_NANOS/ssmode->getFrameDurationRange().min();
           break;
         }
-      else if (mConfig.mWidth==0 && mConfig.mHeight ==0)
-      {
-        m_sensor_mode = 0;
-        mConfig.mWidth = s_width;
-        mConfig.mHeight = s_height;
-        break;
-      }
     }
+  }
 
   if (m_sensor_mode<0 || m_sensor_mode>=sensorModes.size())
     {
