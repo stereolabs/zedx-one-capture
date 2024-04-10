@@ -318,6 +318,53 @@ ARGUS_STATE ArgusBayerCapture::openCamera(const ArgusCameraConfig &config,bool r
       return ARGUS_STATE::INVALID_OUTPUT_STREAM_SETTINGS;
     }
 
+  ///// Configure source settings (FPS/ AutoControl...)
+  vector<SensorMode*> sensorModes;
+  // 1. Get sensor mode
+  iCameraProperties = interface_cast<ICameraProperties>(h->cameraDevice);
+  status = iCameraProperties->getAllSensorModes(&sensorModes);
+  if (Argus::STATUS_OK != status || sensorModes.empty()) {
+      ArgusProvider::changeState(mPort,ARGUS_CAMERA_STATE::OFF);
+      return ARGUS_STATE::INVALID_SOURCE_CONFIGURATION;
+    }
+
+
+  //2. Find sensor mode according to width/height. If width or height = 0, choose the first / default sensor mode
+  int m_sensor_mode = -1;
+  if (mConfig.mWidth==0 || mConfig.mHeight == 0)
+  {
+      //Take the first sensor mode
+      m_sensor_mode = 0;
+      ISensorMode* ssmode = Argus::interface_cast<Argus::ISensorMode>(sensorModes[m_sensor_mode]);
+      mConfig.mWidth = ssmode->getResolution().width();
+      mConfig.mHeight = ssmode->getResolution().height();
+      if (mConfig.mFPS==0)
+          mConfig.mFPS = ONE_SECOND_NANOS/ssmode->getFrameDurationRange().min();
+
+  }
+  else
+  {
+    for (int k=0;k<sensorModes.size();k++)
+    {
+      ISensorMode* ssmode = Argus::interface_cast<Argus::ISensorMode>(sensorModes[k]);
+      int s_width = ssmode->getResolution().width();
+      int s_height = ssmode->getResolution().height();
+      if (mConfig.mWidth==s_width && mConfig.mHeight == s_height)
+        {
+          m_sensor_mode = k;
+          if (mConfig.mFPS==0)
+              mConfig.mFPS = ONE_SECOND_NANOS/ssmode->getFrameDurationRange().min();
+          break;
+        }
+    }
+  }
+
+  if (m_sensor_mode<0 || m_sensor_mode>=sensorModes.size())
+    {
+      ArgusProvider::changeState(mPort,ARGUS_CAMERA_STATE::OFF);
+      return ARGUS_STATE::INVALID_SOURCE_CONFIGURATION;
+    }
+
   /// Create an Even resolution (only even supported)
   auto evenResolution = Argus::Size2D<uint32_t>(
         ROUND_UP_EVEN(mConfig.mWidth),
@@ -397,38 +444,6 @@ ARGUS_STATE ArgusBayerCapture::openCamera(const ArgusCameraConfig &config,bool r
 
   if (mConfig.verbose_level>0)
     std::cout<<"[ArgusCapture] --> Create stream Done" <<std::endl;
-
-  ///// Configure source settings (FPS/ AutoControl...)
-  vector<SensorMode*> sensorModes;
-  // 1. Get sensor mode
-  iCameraProperties = interface_cast<ICameraProperties>(h->cameraDevice);
-  status = iCameraProperties->getAllSensorModes(&sensorModes);
-  if (Argus::STATUS_OK != status) {
-      ArgusProvider::changeState(mPort,ARGUS_CAMERA_STATE::OFF);
-      return ARGUS_STATE::INVALID_SOURCE_CONFIGURATION;
-    }
-
-
-  //2. Find sensor mode according to width/height
-  int m_sensor_mode = -1;
-  for (int k=0;k<sensorModes.size();k++)
-    {
-      ISensorMode* ssmode = Argus::interface_cast<Argus::ISensorMode>(sensorModes[k]);
-      int s_width = ssmode->getResolution().width();
-      int s_height = ssmode->getResolution().height();
-      if (mConfig.mWidth==s_width && mConfig.mHeight == s_height)
-        {
-          m_sensor_mode = k;
-          break;
-        }
-
-    }
-
-  if (m_sensor_mode<0 || m_sensor_mode>=sensorModes.size())
-    {
-      ArgusProvider::changeState(mPort,ARGUS_CAMERA_STATE::OFF);
-      return ARGUS_STATE::INVALID_SOURCE_CONFIGURATION;
-    }
 
 
   //3. Set sensor mode to the source

@@ -93,10 +93,10 @@ public:
     void setDeviceID(uint32_t id_) {mDeviceId = id_;}
     void setChannels(int c_) {mChannel = c_;}
 
-    uint32_t mDeviceId;
-    uint32_t mWidth;
-    uint32_t mHeight;
-    uint32_t mFPS;
+    uint32_t mDeviceId= 0;
+    uint32_t mWidth= 0;
+    uint32_t mHeight= 0;
+    uint32_t mFPS = 0;
     int mChannel = 4; //Only 4 supported (BGRA or RGBA)/ 3 not yet supported
     bool mSwapRB = false; //swap for RGB(A) or BGR(A) output
     int verbose_level = 0;
