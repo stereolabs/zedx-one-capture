@@ -6,13 +6,18 @@
 #include "ArgusCapture.hpp"
 #include "opencv2/opencv.hpp"
 #include <filesystem>
+#include <deque>
 
+
+#define SAFE_DELETE(e) if (e) { \
+                        delete(e);\
+                        e = NULL;}\
 
 // CHANGE THIS PARAM BASED ON THE CHECKERBOARD USED
 // https://docs.opencv.org/4.x/da/d0d/tutorial_camera_calibration_pattern.html
-int target_w = 5; // number of inner squares
-int target_h = 3;
-float square_size = 44.0; // mm
+int target_w = 9; // number of inner squares
+int target_h = 6;
+float square_size = 25.0; // mm
 
 std::string folder = "/tmp/zed-one/image/";
 std::string output_filename = "SN_ZEDONES.conf";
@@ -38,6 +43,45 @@ struct extrinsic_checker {
     float distance_tot;
 };
 
+struct SyncMat{
+    cv::Mat rgb_img;
+    uint64 ts; // in micro second
+};
+
+
+
+std::deque<SyncMat*> imageCaptureQueue[2];
+std::mutex mutex_internal[2];
+
+
+
+void ingestImageInQueue(oc::ArgusBayerCapture &camera,int side)
+{
+    while(camera.isOpened())
+    {
+        if(camera.isNewFrame())
+        {
+            std::lock_guard<std::mutex> guard(mutex_internal[side]);
+            cv::Mat rgb = cv::Mat(camera.getHeight(), camera.getWidth(), CV_8UC4, 1);
+            memcpy(rgb.data, camera.getPixels(), camera.getWidth() * camera.getHeight() * camera.getNumberOfChannels());
+            SyncMat* img = new SyncMat();
+            rgb.copyTo(img->rgb_img);
+            img->ts = camera.getImageTimestampinUs();
+            imageCaptureQueue[side].push_back(img);
+
+            if (imageCaptureQueue[side].size()>5)
+            {
+                SyncMat* tmp  = imageCaptureQueue[side].front();
+                SAFE_DELETE(tmp)
+                imageCaptureQueue[side].pop_front();
+            }
+        }
+    }
+}
+
+int SyncCameraPair(cv::Mat &rgb_l,cv::Mat &rgb_r);
+
+
 std::map<std::string, std::string> parseArguments(int argc, char* argv[]);
 bool writeTextCenter(cv::Mat& image, float rot_x, float rot_y, float rot_z, float distance, int fontSize);
 bool WriteConfFile(cv::Mat& intrinsic_left, cv::Mat& intrinsic_right, cv::Mat& distortion_left, cv::Mat& distortion_right, cv::Mat& translation, cv::Mat& rotation, int model);
@@ -58,7 +102,7 @@ const float acceptable_distance = 150; // in mm
 std::vector<std::vector<cv::Point2f>> pts_detected;
 
 std::vector<cv::Point2f> square_valid;
-const int bucketsize = 300;
+const int bucketsize = 480;
 const int MinPts = 10;
 const int MaxPts = 90;
 cv::Scalar info_color = cv::Scalar(50,205,50);
@@ -87,24 +131,6 @@ int main(int argc, char *argv[]) {
     std::cout << "***********************" << std::endl;
 
     oc::ArgusCameraConfig config;
-
-    if(devs.size() >= 2) {
-        if(devs.at(camera_id_0).badge == "zedx_imx678") {
-            std::cout << "ZED One 4K detected!" << std::endl;
-            config.mFPS = 15;
-            config.mWidth = 3856;
-            config.mHeight = 2180; 
-        } else if(devs.at(camera_id_0).badge == "zedx_ar0234") {
-            std::cout << "ZED One GS detected!" << std::endl;
-            config.mFPS = 30;
-            config.mWidth = 1920;
-            config.mHeight = 1200; 
-        }
-
-    } else {
-        std::cerr << "No cameras detected" << std::endl;
-        return -1;
-    }
 
     config.mDeviceId = camera_id_0;
     config.verbose_level = 3;
@@ -161,9 +187,6 @@ int main(int argc, char *argv[]) {
     std::cout << "Expected checkerboard square size are " << target_w << "x" << target_h << " " << square_size << "mm" << std::endl;
     std::cout << "Change those values in the code depending on your checkerboard !" << std::endl;
 
-    cv::Mat rgb = cv::Mat(config.mHeight, config.mWidth, CV_8UC4, 1);
-    cv::Mat rgb_1 = cv::Mat(config_1.mHeight, config_1.mWidth, CV_8UC4, 1);
-
     cv::Mat rgb_d, rgb2_d, rgb_d_fill;
     bool start_calibration = false;
 
@@ -193,19 +216,30 @@ int main(int argc, char *argv[]) {
     bool very_first_image=true;
     bool missing_left_target_on_last_pic = false;
     bool missing_right_target_on_last_pic = false;
+
+    cv::Mat rgb_l;
+    cv::Mat rgb_r;
+
+    //Start image grabber Left and Right
+    std::thread runner_left(ingestImageInQueue,std::ref(camera_0),0);
+    std::thread runner_right(ingestImageInQueue,std::ref(camera_1),1);
+
+
+    // Number of area to fill 4 horizontally
+    bucketsize = camera_0.getWidth()/4;
+
     while (key != 'q') {
-        if (camera_0.isNewFrame() && camera_1.isNewFrame()) {
-            memcpy(rgb.data, camera_0.getPixels(), camera_0.getWidth() * camera_0.getHeight() * camera_0.getNumberOfChannels());
-            memcpy(rgb_1.data, camera_1.getPixels(), camera_1.getWidth() * camera_1.getHeight() * camera_1.getNumberOfChannels());
+        if (SyncCameraPair(rgb_l,rgb_r)==0) {
 
 
-            cv::resize(rgb, rgb_d, display_size);
-            cv::resize(rgb_1, rgb2_d, display_size);
+
+            cv::resize(rgb_l, rgb_d, display_size);
+            cv::resize(rgb_r, rgb2_d, display_size);
 
             if (!angle_clb && !calibration_done) {
                 cv::Mat rgb_with_lack_of_pts;
                 std::vector<cv::Mat> channels;
-                cv::split(rgb, channels);
+                cv::split(rgb_l, channels);
                 cv::Mat blank = cv::Mat::zeros(cv::Size(config.mWidth, config.mHeight), CV_8UC1);
                 float x_end,y_end;
                 float x_max = 0;
@@ -222,14 +256,12 @@ int main(int argc, char *argv[]) {
                         x_max = square_valid.at(i).x;
                     cv::rectangle(blank, square_valid.at(i), cv::Point(x_end, y_end), cv::Scalar(128, 0, 128), -1);
                 }
-                std::cout << "x_max " << x_max << std::endl;
-
                 channels[0] = channels[0] - blank;
                 channels[2] = channels[2] - blank;
                 cv::merge(channels, rgb_with_lack_of_pts);
                 cv::resize(rgb_with_lack_of_pts, rgb_d_fill, display_size);
             } else {
-                cv::resize(rgb, rgb_d_fill, display_size);
+                cv::resize(rgb_l, rgb_d_fill, display_size);
             }
 
             cv::Mat display, display_info;
@@ -270,8 +302,8 @@ int main(int argc, char *argv[]) {
             if (!calibration_done && key == 's') {
                 if (!angle_clb) coverage_mode = true;
                 std::vector<cv::Point2f> pts_l,pts_r;
-                bool find_l = cv::findChessboardCorners(rgb, cv::Size(target_w, target_h), pts_l, 3);
-                bool find_r = cv::findChessboardCorners(rgb_1, cv::Size(target_w, target_h), pts_r, 3);
+                bool find_l = cv::findChessboardCorners(rgb_l, cv::Size(target_w, target_h), pts_l, 3);
+                bool find_r = cv::findChessboardCorners(rgb_r, cv::Size(target_w, target_h), pts_r, 3);
 
                 if(!find_r)
                     missing_right_target_on_last_pic = true;
@@ -318,12 +350,13 @@ int main(int argc, char *argv[]) {
                         }
                     }
 
-                    // saves the images
-                    cv::imwrite(folder + "image_left_" + std::to_string(image_count) + ".png", rgb);
-                    cv::imwrite(folder + "image_right_" + std::to_string(image_count) + ".png", rgb_1);
-                    std::cout << "images created." << std::endl;
-                    image_count++;
                 }
+
+                // saves the images
+                cv::imwrite(folder + "image_left_" + std::to_string(image_count) + ".png", rgb_l);
+                cv::imwrite(folder + "image_right_" + std::to_string(image_count) + ".png", rgb_r);
+                std::cout << "images created." << std::endl;
+                image_count++;
 
             } else if (start_calibration) {
                 int err = TryCalibration(folder, target_w, target_h, square_size);
@@ -336,6 +369,7 @@ int main(int argc, char *argv[]) {
                     std::cout << "CALIBRATION fail" << std::endl;
                 }
             }
+
         } else
             usleep(100);
 
@@ -344,6 +378,11 @@ int main(int argc, char *argv[]) {
     }
     camera_0.closeCamera();
     camera_1.closeCamera();
+
+
+    runner_left.join();
+    runner_right.join();
+
 
     return 0;
 
@@ -528,7 +567,7 @@ int TryCalibration(std::string folder, int target_w, int target_h, float square_
         cv::Mat intrinsic_l, intrinsic_r, distortion_l, distortion_r;
         cv::Mat R_, T, r_, E_, F_;
 
-        int flag = cv::CALIB_RATIONAL_MODEL;
+        int flag = cv::CALIB_ZERO_DISPARITY;//cv::CALIB_RATIONAL_MODEL;
         float err = cv::stereoCalibrate(object_points, pts_l, pts_r, intrinsic_l, distortion_l, intrinsic_r, distortion_r, imageSize,
                 R_, T, E_, F_, flag, cv::TermCriteria(cv::TermCriteria::COUNT + cv::TermCriteria::EPS, 1000, 0.001));
 
@@ -834,5 +873,120 @@ void checkRT(extrinsic_checker& checker_, cv::Mat r, cv::Mat tvec) {
     std::cout << "rot y : " << checker_.rot_y_delta << std::endl;
     std::cout << "rot z : " << checker_.rot_z_delta << std::endl;
     std::cout << "dist : " << checker_.distance_tot << std::endl;
+
+}
+
+
+
+int SyncCameraPair(cv::Mat &rgb_l,cv::Mat &rgb_r)
+
+{
+  //  Get Queue size and return if empty (no new frame)
+  int maxSizeLeftQueue = 0, maxSizeRightQueue = 0;
+  {
+    std::lock_guard<std::mutex> guard_l(mutex_internal[0]);
+    maxSizeLeftQueue = imageCaptureQueue[0].size();
+  }
+  {
+    std::lock_guard<std::mutex> guard_r(mutex_internal[1]);
+    maxSizeRightQueue = imageCaptureQueue[1].size();
+  }
+
+  if (maxSizeLeftQueue<=0 || maxSizeRightQueue<=0)
+    return 1;
+
+  /////////////// Timestamp Synchronisation mechanism //////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////////////
+  SyncMat* tmpImageTryLeft;
+  SyncMat* tmpImageTryRight;
+  bool found_in_right_queue = false;
+
+  int iLTarget = 1;//maxSizeLeftQueue;
+  int iRtarget = 1;//maxSizeRightQueue;
+  // How this is done : //
+  // Take last argusImage on the left queue (at the time it was lock).
+  // Try to find the sync argusImage on the right queue started from the last image in queue. Then increase the counter if not found.
+  // If no right image found, then increase the left counter in queue so that we take the last - 1 then retry.... until no image in queue.
+  // If we found a right image that fits. break and output images.
+  // At the end , free all the remaining queue since it won't be used (previous timestamp).
+  do
+    {
+      {
+        std::lock_guard<std::mutex> guard(mutex_internal[0]);
+        if (maxSizeLeftQueue-iLTarget<0 || maxSizeLeftQueue-iLTarget>=imageCaptureQueue[0].size())
+          return 1;
+
+        tmpImageTryLeft = imageCaptureQueue[0].at(maxSizeLeftQueue-iLTarget);
+      }
+      uint64 targetTS = tmpImageTryLeft->ts;
+      found_in_right_queue = false;
+      uint64 rightTS = 0;
+
+      do
+        {
+          {
+            std::lock_guard<std::mutex> guard(mutex_internal[1]);
+            if (maxSizeRightQueue-iRtarget<0 || maxSizeRightQueue-iRtarget>=imageCaptureQueue[1].size())
+              return 1;
+
+            tmpImageTryRight = imageCaptureQueue[1].at(maxSizeRightQueue-iRtarget);
+          }
+          rightTS = tmpImageTryRight->ts;
+          if (abs((long long)rightTS-(long long)targetTS)<=2000) //SyncDiff must be lower than 2000us
+            {
+              found_in_right_queue = true;
+              break;
+            }
+          iRtarget++;
+          usleep(100);
+        }
+      while(maxSizeRightQueue-iRtarget>=0);
+
+
+      if (found_in_right_queue)
+        {
+          {
+          std::lock_guard<std::mutex> guardL(mutex_internal[0]);
+          std::lock_guard<std::mutex> guardR(mutex_internal[1]);
+          tmpImageTryLeft->rgb_img.copyTo(rgb_l);
+          tmpImageTryRight->rgb_img.copyTo(rgb_r);
+          }
+          break;
+        }
+      iRtarget = 1;
+      iLTarget++;
+    }
+  while(maxSizeLeftQueue-iLTarget>=0);
+
+
+  //Not found... No new frame sync
+  if (!found_in_right_queue)
+    {
+      return 1;
+    }
+
+
+  ///empy all the queue before it will not be used. //
+  {
+    std::lock_guard<std::mutex> guard_l(mutex_internal[0]);
+    for (int p=0;p<=maxSizeLeftQueue-iLTarget;p++)
+      {
+        SyncMat* tmp  = imageCaptureQueue[0].front();
+        SAFE_DELETE(tmp)
+        imageCaptureQueue[0].pop_front();
+      }
+  }
+
+  {
+    std::lock_guard<std::mutex> guard_r(mutex_internal[1]);
+    for (int p=0;p<=maxSizeRightQueue-iRtarget;p++)
+      {
+        SyncMat* tmp  = imageCaptureQueue[1].front();
+        SAFE_DELETE(tmp)
+        imageCaptureQueue[1].pop_front();
+
+      }
+  }
+  return 0;
 
 }
