@@ -85,6 +85,9 @@ int main(int argc, char *argv[]) {
                 std::cout << "images created." << std::endl;
                 image_count++;
             }
+
+            camera_0.setManualTimeExposure(5000);
+
         } else
             usleep(100);
 

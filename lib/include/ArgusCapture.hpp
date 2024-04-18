@@ -45,6 +45,14 @@ struct ArgusDevice
 
 };
 
+typedef enum {
+    COLOR_RGBA,
+    COLOR_RGB,
+    RAW10,
+    RAW12
+} PixelMode;
+
+
 class PollEvent
 {
 public:
@@ -91,14 +99,14 @@ public:
     }
     void setFPS(uint32_t fps_) { mFPS = fps_; }
     void setDeviceID(uint32_t id_) {mDeviceId = id_;}
-    void setChannels(int c_) {mChannel = c_;}
+    void setPixelMode(PixelMode pm_) {mode = pm_;}
 
     uint32_t mDeviceId;
     uint32_t mWidth;
     uint32_t mHeight;
     uint32_t mFPS;
-    int mChannel = 4; //Only 4 supported (BGRA or RGBA)/ 3 not yet supported
-    bool mSwapRB = false; //swap for RGB(A) or BGR(A) output
+    PixelMode mode = PixelMode::COLOR_RGBA;
+    bool mSwapRB = false; //swap for RGB(A) or BGR(A) output. Not available for RAW10
     int verbose_level = 0;
 };
 
@@ -352,9 +360,17 @@ public :
 
   ///
   /// \brief getNumberOfChannels
-  /// \return the number of channels (3 or 4) for RGB/A
+  /// \return the number of channels (3 or 4) for RGB/A, 1 for RAW10
+  /// For RAW10, use the pixel depth to have the number of Bytes per pixel
   ///
   int getNumberOfChannels();
+
+
+  ///
+  /// \brief getPixelDepth
+  /// \return the pixel depth in Bytes (1 for RGB(A), 2 for RAW10 as in 16bits image)
+  ///
+  int getPixelDepth();
 
 
   ///
@@ -384,6 +400,8 @@ protected :
   int width = 0;
   int height = 0;
   int nChannel = 4;
+  int pixel_depth = 1;
+  PixelMode pixel_mode;
   int fps = 0;
   bool opened_ = false;
   ArgusCameraConfig mConfig={0};
