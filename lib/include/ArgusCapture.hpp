@@ -101,10 +101,10 @@ public:
     void setDeviceID(uint32_t id_) {mDeviceId = id_;}
     void setPixelMode(PixelMode pm_) {mode = pm_;}
 
-    uint32_t mDeviceId;
-    uint32_t mWidth;
-    uint32_t mHeight;
-    uint32_t mFPS;
+    uint32_t mDeviceId=0;
+    uint32_t mWidth=0;
+    uint32_t mHeight=0;
+    uint32_t mFPS=0;
     PixelMode mode = PixelMode::COLOR_RGBA;
     bool mSwapRB = false; //swap for RGB(A) or BGR(A) output. Not available for RAW10
     int verbose_level = 0;
@@ -263,7 +263,7 @@ public :
   virtual int getAnalogGainLimits(float& min_gain,float& max_gain)=0;
   virtual int setAutomaticAnalogGain()=0;
   virtual int setManualAnalogGain(int percent)=0;
-  virtual int setManualAnalogGainReal(int db)=0;
+  virtual int setManualAnalogGainReal(float db)=0;
   virtual float getDigitalFrameGain()=0;
   virtual int setDigitalFrameGainRange(float gain_low,float gain_high)=0;
   virtual int getDigitalFrameGainRange(float& dgain_low,float& dgain_high)=0;
@@ -291,7 +291,7 @@ public :
   virtual int setAEAntiBanding(AEANTIBANDING mode)=0;
 
   virtual int setDenoisingValue(float value)=0;
-  virtual float getDenoisingValue(int side)=0;
+  virtual float getDenoisingValue()=0;
 
   virtual int setExposureCompensation(float ev)=0;
   virtual float getExposureCompensation()=0;
@@ -518,7 +518,7 @@ class __attribute__((visibility("default"))) ArgusV4l2Capture : public ArgusVirt
     int getAnalogGainLimits(float& min_gain,float& max_gain);
     int setAutomaticAnalogGain();
     int setManualAnalogGain(int percent);
-    int setManualAnalogGainReal(int db);
+    int setManualAnalogGainReal(float db);
     float getDigitalFrameGain();
     int setDigitalFrameGainRange(float gain_low,float gain_high);
     int getDigitalFrameGainRange(float& dgain_low,float& dgain_high);
@@ -539,7 +539,7 @@ class __attribute__((visibility("default"))) ArgusV4l2Capture : public ArgusVirt
     float getGamma();
     int setAEAntiBanding(AEANTIBANDING mode);
     int setDenoisingValue(float value);
-    float getDenoisingValue(int side);
+    float getDenoisingValue();
     int setExposureCompensation(float ev);
     float getExposureCompensation();
     int setROIforAECAGC(oc::Rect roi);
@@ -752,7 +752,7 @@ class __attribute__((visibility("default"))) ArgusBayerCapture : public ArgusVir
     /// \param db : db as real db *100
     /// \return 0 if success, <0 if camera unavailable, >0 if error from argus side
     ///
-    int setManualAnalogGainReal(int db);
+    int setManualAnalogGainReal(float db);
 
     //////////////////////////////////
     ////////// ISP GAIN /// //////////
@@ -935,7 +935,7 @@ class __attribute__((visibility("default"))) ArgusBayerCapture : public ArgusVir
     /// \brief getDenoisingValue
     /// \return [0 - 1.0] value. <0 means error
     ///
-    float getDenoisingValue(int side);
+    float getDenoisingValue();
 
 
     //////////////////////////////////
