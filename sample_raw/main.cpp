@@ -35,10 +35,10 @@ int main(int argc, char *argv[]) {
 
     /// Create configuration for the camera
     oc::ArgusCameraConfig config;
-    config.mDeviceId = 0;
-    config.mFPS = 15;
-    config.mWidth = 3840;
-    config.mHeight = 2160;
+    config.mDeviceId = camera_id_0;
+    config.mFPS = rq_fps;
+    config.mWidth = rq_width;
+    config.mHeight = rq_height;
     config.mode = oc::PixelMode::RAW12;
     config.verbose_level = 2;
 
