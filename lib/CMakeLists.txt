@@ -67,9 +67,7 @@ IF(NOT WIN32)
     ENDIF()
 ENDIF()
 
-##message(${TegraMM_COMMON_SOURCES})
-##message("          \n              ")
-##message(${SPECIAL_OS_LIBS})
+
 
 ### Add sources for library
 add_library(${LIB_NAME} SHARED ${ARGUS_CAPTURE_SRC} ${ARGUS_CAPTURE_HDR} ${TegraMM_COMMON_SOURCES})

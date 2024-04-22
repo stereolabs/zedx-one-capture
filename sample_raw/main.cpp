@@ -39,7 +39,7 @@ int main(int argc, char *argv[]) {
     config.mFPS = rq_fps;
     config.mWidth = rq_width;
     config.mHeight = rq_height;
-    config.mode = oc::PixelMode::RAW12;
+    config.mode = oc::PixelMode::RAW10; //RAW12 for 4K
     config.verbose_level = 2;
 
     /// Open the camera
@@ -49,7 +49,10 @@ int main(int argc, char *argv[]) {
         std::cerr << "Failed to open Camera, error code " << ARGUS_STATE2str(state_cam0) << std::endl;
         return -1;
     }
+
+    std::cout<<" Creating Mat at resolution : "<<cam_raw.getHeight()<<cam_raw.getWidth()<<" PD : "<<cam_raw.getPixelDepth()<<std::endl;
     cv::Mat rgb_cam0 = cv::Mat(cam_raw.getHeight(), cam_raw.getWidth(), CV_16UC1, 1);
+
     char key = ' ';
     while (key != 'q') {
       if (cam_raw.isNewFrame()) {

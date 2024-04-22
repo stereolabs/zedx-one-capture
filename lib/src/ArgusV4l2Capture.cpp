@@ -61,6 +61,7 @@ inline void clamp(T& x,const T min,const T max)
         x = max;
 }
 
+
 static nv_color_fmt nvcolor_fmt[] =
 {
     /* TODO: add more pixel format mapping */
@@ -70,8 +71,8 @@ static nv_color_fmt nvcolor_fmt[] =
     {V4L2_PIX_FMT_YVYU, NVBUF_COLOR_FORMAT_YVYU},
     {V4L2_PIX_FMT_GREY, NVBUF_COLOR_FORMAT_GRAY8},
     {V4L2_PIX_FMT_YUV420M, NVBUF_COLOR_FORMAT_YUV420},
-    {V4L2_PIX_FMT_SGRBG10, NVBUF_COLOR_FORMAT_ARGB},
-    {V4L2_PIX_FMT_SGRBG12, NVBUF_COLOR_FORMAT_ARGB},
+    {V4L2_PIX_FMT_SRGGB10, NVBUF_COLOR_FORMAT_ARGB},
+    {V4L2_PIX_FMT_SRGGB12, NVBUF_COLOR_FORMAT_ARGB},
 
 };
 
@@ -144,7 +145,6 @@ ARGUS_STATE ArgusV4l2Capture::openCamera(const ArgusCameraConfig &config,bool re
     ctx.cam_w = mConfig.mWidth;
     ctx.cam_h = mConfig.mHeight;
     ctx.fps = mConfig.mFPS;
-    ctx.cam_w = mConfig.mWidth;
     std::string devname = std::string("/dev/video")+std::to_string(mConfig.mDeviceId);
     ctx.cam_devname = devname.c_str();
     ctx.cam_pixfmt = V4L2_PIX_FMT_YUYV;
@@ -152,14 +152,14 @@ ARGUS_STATE ArgusV4l2Capture::openCamera(const ArgusCameraConfig &config,bool re
     {
         if (mConfig.verbose_level>0)
             std::cout<<"[ArgusCapture] Camera at Port"<<mPort<<" is using RAW10 pixel format"<<std::endl;
-        ctx.cam_pixfmt = V4L2_PIX_FMT_SGRBG10;
+        ctx.cam_pixfmt = V4L2_PIX_FMT_SRGGB10;
     }
 
     if (pixel_mode == PixelMode::RAW12)
     {
         if (mConfig.verbose_level>0)
             std::cout<<"[ArgusCapture] Camera at Port"<<mPort<<" is using RAW12 pixel format"<<std::endl;
-        ctx.cam_pixfmt = V4L2_PIX_FMT_SGRBG12;
+        ctx.cam_pixfmt = V4L2_PIX_FMT_SRGGB12;
     }
 
     /// Make sure it's not already open
@@ -183,6 +183,16 @@ ARGUS_STATE ArgusV4l2Capture::openCamera(const ArgusCameraConfig &config,bool re
 
         ArgusProvider::changeState(mPort,ARGUS_CAMERA_STATE::OFF);
         return ARGUS_STATE::INVALID_CAMERA_PROVIDER;
+    }
+
+    /// This set ByPass mode -- needed especially if Argus API used before
+    struct v4l2_ext_control ctrl;
+    ctrl.id = 0x009a2064;
+    ctrl.value = 0;
+    if (ioctl(ctx.cam_fd, VIDIOC_S_CTRL, &ctrl) < 0)
+    {
+        if (mConfig.verbose_level>0)
+            printf("[ArgusCapture] Failed to SET EXT CTRL for %x || Err : %s\n",ctrl.id,strerror(errno));
     }
 
 
@@ -214,6 +224,15 @@ ARGUS_STATE ArgusV4l2Capture::openCamera(const ArgusCameraConfig &config,bool re
         ArgusProvider::changeState(mPort,ARGUS_CAMERA_STATE::OFF);
         return ARGUS_STATE::INVALID_SOURCE_CONFIGURATION;
     }
+
+    if (mConfig.verbose_level>0)
+        std::cout<<"[ArgusCapture] Resolution requested :"<<ctx.cam_w<<"x"<<ctx.cam_h<<std::endl;
+
+
+    std::cout<<" W : "<<fmt.fmt.pix.width<<" , "<<ctx.cam_w<<std::endl;
+    std::cout<<" H : "<<fmt.fmt.pix.height<<" , "<<ctx.cam_h<<std::endl;
+    std::cout<<" PF : "<<fmt.fmt.pix.pixelformat<<" , "<<ctx.cam_pixfmt<<std::endl;
+
 
     if (fmt.fmt.pix.width != ctx.cam_w ||
             fmt.fmt.pix.height != ctx.cam_h ||
@@ -348,7 +367,7 @@ ARGUS_STATE ArgusV4l2Capture::openCamera(const ArgusCameraConfig &config,bool re
     }
 
     if (mConfig.verbose_level>0)
-        std::cout<<"[ArgusCapture] --> Using Resolution " <<width<<"x"<<height<<"@"<<fps<<std::endl;
+        std::cout<<"[ArgusCapture] --> Using Resolution " <<width<<"x"<<height<<"@"<<fps<<", Nb Ch : "<<nChannel<<" , Pixel Depth : "<<pixel_depth<<std::endl;
     internal_buffer_grab = (unsigned char*)malloc(width * height * nChannel* pixel_depth);
     if (!use_outer_buffer)
         ptr_buffer_sdk = internal_buffer_grab;
@@ -633,7 +652,7 @@ void ArgusV4l2Capture::consume()
             argusMonoImage mNewImage = mCaptureQueue.front();
             consumer_image_ts_us = mNewImage.imageTimestamp;
             if (ptr_buffer_sdk)
-                memcpy(ptr_buffer_sdk,mNewImage.imageData,width*height*nChannel);
+                memcpy(ptr_buffer_sdk,mNewImage.imageData,width*height*nChannel*pixel_depth);
             else
                 std::cout<<"[ArgusCapture][CRITICAL] Invalid pointer provided for buffer acquisition"<<std::endl;
 

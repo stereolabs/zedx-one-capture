@@ -102,7 +102,7 @@ const float acceptable_distance = 150; // in mm
 std::vector<std::vector<cv::Point2f>> pts_detected;
 
 std::vector<cv::Point2f> square_valid;
-const int bucketsize = 480;
+int bucketsize = 480;
 const int MinPts = 10;
 const int MaxPts = 90;
 cv::Scalar info_color = cv::Scalar(50,205,50);
@@ -145,33 +145,7 @@ int main(int argc, char *argv[]) {
     oc::ArgusBayerCapture camera_0, camera_1;
     oc::ARGUS_STATE state = camera_0.openCamera(config);
     oc::ARGUS_STATE state_isx031 = camera_1.openCamera(config_1);
-    /*
-    enum class ARGUS_STATE {
-        OK,
-        ALREADY_OPEN,
-        I2C_COMM_FAILED,
-        INVALID_CAMERA_PROVIDER,
-        INVALID_DEVICE_ENUMERATION,
-        NO_CAMERA_AVAILABLE,
-        INVALID_CAMERA_PROPERTIES,
-        INVALID_CAMERA_SN,
-        INVALID_CAPTURE_SESSION,
-        INVALID_OUTPUT_STREAM_SETTINGS,
-        INVALID_STREAM_CREATION,
-        INVALID_FRAME_CONSUMER,
-        INVALID_CAPTURE_REQUEST,
-        INVALID_OUTPUT_STREAM_REQUEST,
-        INVALID_SOURCE_CONFIGURATION,
-        CANNOT_START_STREAM_REQUEST,
-        CONNECTION_TIMEOUT,
-        CAPTURE_TIMEOUT,
-        CAPTURE_FAILURE,
-        CAPTURE_UNSYNC,
-        CAPTURE_CONVERT_FAILURE,
-        UNSUPPORTED_FCT,
-        UNKNOWN
-    };
-    */
+
     if (state != oc::ARGUS_STATE::OK) {
         std::cerr << "Failed to open Camera, error code " << ARGUS_STATE2str(state) << std::endl;
         return -1;
@@ -231,8 +205,6 @@ int main(int argc, char *argv[]) {
     while (key != 'q') {
         if (SyncCameraPair(rgb_l,rgb_r)==0) {
 
-
-
             cv::resize(rgb_l, rgb_d, display_size);
             cv::resize(rgb_r, rgb2_d, display_size);
 
@@ -240,7 +212,7 @@ int main(int argc, char *argv[]) {
                 cv::Mat rgb_with_lack_of_pts;
                 std::vector<cv::Mat> channels;
                 cv::split(rgb_l, channels);
-                cv::Mat blank = cv::Mat::zeros(cv::Size(config.mWidth, config.mHeight), CV_8UC1);
+                cv::Mat blank = cv::Mat::zeros(cv::Size(camera_0.getWidth(), camera_0.getHeight()), CV_8UC1);
                 float x_end,y_end;
                 float x_max = 0;
                 for (int i = 0; i < square_valid.size(); i++) {
@@ -319,13 +291,13 @@ int main(int argc, char *argv[]) {
                     very_first_image = false;
                     if (!angle_clb) {
                         pts_detected.push_back(pts_l);
-                        cov_left = CheckCoverage(pts_detected, cv::Size(config.mWidth, config.mHeight));
+                        cov_left = CheckCoverage(pts_detected, cv::Size(camera_0.getWidth(), camera_0.getHeight()));
                         pts_obj_tot.push_back(pts_obj_);
                         std::cout << "coverage : " << (1-cov_left)*100 << "%" << std::endl;
                         if (cov_left < 0.1) {
                             cv::Mat rvec(1, 3, CV_64FC1);
                             cv::Mat tvec(1, 3, CV_64FC1);
-                            float err = cv::calibrateCamera(pts_obj_tot, pts_detected, cv::Size(config.mWidth, config.mHeight), K_left, D_left, r_left, t_left);
+                            float err = cv::calibrateCamera(pts_obj_tot, pts_detected, cv::Size(camera_0.getWidth(), camera_0.getHeight()), K_left, D_left, r_left, t_left);
                             bool find_ = cv::solvePnP(pts_obj_, pts_l, K_left, D_left, rvec, tvec, false, cv::SOLVEPNP_ITERATIVE);
 
                             checker.rot_x_min = rvec.at<double>(0) * 180 / M_PI;
