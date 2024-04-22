@@ -53,6 +53,14 @@ int ArgusVirtualCapture::getNumberOfChannels()
   return nChannel;
 }
 
+int ArgusVirtualCapture::getPixelDepth()
+{
+  if (!opened_)
+    return 0;
+  return pixel_depth;
+}
+
+
 
 bool ArgusVirtualCapture::isNewFrame()
 {

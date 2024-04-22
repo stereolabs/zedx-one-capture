@@ -35,8 +35,8 @@ int main(int argc, char *argv[]) {
         if(devs.at(camera_id_0).badge == "zedx_imx678") {
             std::cout << "ZED One 4K detected!" << std::endl;
             config.mFPS = 15;
-            config.mWidth = 3856;
-            config.mHeight = 2180; 
+            config.mWidth = 3840;
+            config.mHeight = 2160;
         } else if(devs.at(camera_id_0).badge == "zedx_ar0234") {
             std::cout << "ZED One GS detected!" << std::endl;
             config.mFPS = 30;

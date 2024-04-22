@@ -6,7 +6,12 @@
 #include "ArgusCapture.hpp"
 #include "opencv2/opencv.hpp"
 #include <filesystem>
+#include <deque>
 
+
+#define SAFE_DELETE(e) if (e) { \
+                        delete(e);\
+                        e = NULL;}\
 
 // CHANGE THIS PARAM BASED ON THE CHECKERBOARD USED
 // https://docs.opencv.org/4.x/da/d0d/tutorial_camera_calibration_pattern.html
@@ -38,6 +43,45 @@ struct extrinsic_checker {
     float distance_tot;
 };
 
+struct SyncMat{
+    cv::Mat rgb_img;
+    uint64 ts; // in micro second
+};
+
+
+
+std::deque<SyncMat*> imageCaptureQueue[2];
+std::mutex mutex_internal[2];
+
+
+
+void ingestImageInQueue(oc::ArgusBayerCapture &camera,int side)
+{
+    while(camera.isOpened())
+    {
+        if(camera.isNewFrame())
+        {
+            std::lock_guard<std::mutex> guard(mutex_internal[side]);
+            cv::Mat rgb = cv::Mat(camera.getHeight(), camera.getWidth(), CV_8UC4, 1);
+            memcpy(rgb.data, camera.getPixels(), camera.getWidth() * camera.getHeight() * camera.getNumberOfChannels());
+            SyncMat* img = new SyncMat();
+            rgb.copyTo(img->rgb_img);
+            img->ts = camera.getImageTimestampinUs();
+            imageCaptureQueue[side].push_back(img);
+
+            if (imageCaptureQueue[side].size()>5)
+            {
+                SyncMat* tmp  = imageCaptureQueue[side].front();
+                SAFE_DELETE(tmp)
+                imageCaptureQueue[side].pop_front();
+            }
+        }
+    }
+}
+
+int SyncCameraPair(cv::Mat &rgb_l,cv::Mat &rgb_r);
+
+
 std::map<std::string, std::string> parseArguments(int argc, char* argv[]);
 bool writeTextCenter(cv::Mat& image, float rot_x, float rot_y, float rot_z, float distance, int fontSize);
 bool WriteConfFile(cv::Mat& intrinsic_left, cv::Mat& intrinsic_right, cv::Mat& distortion_left, cv::Mat& distortion_right, cv::Mat& translation, cv::Mat& rotation, int model);
@@ -58,7 +102,7 @@ const float acceptable_distance = 150; // in mm
 std::vector<std::vector<cv::Point2f>> pts_detected;
 
 std::vector<cv::Point2f> square_valid;
-const int bucketsize = 300;
+int bucketsize = 480;
 const int MinPts = 10;
 const int MaxPts = 90;
 cv::Scalar info_color = cv::Scalar(50,205,50);
@@ -88,24 +132,6 @@ int main(int argc, char *argv[]) {
 
     oc::ArgusCameraConfig config;
 
-    if(devs.size() >= 2) {
-        if(devs.at(camera_id_0).badge == "zedx_imx678") {
-            std::cout << "ZED One 4K detected!" << std::endl;
-            config.mFPS = 15;
-            config.mWidth = 3856;
-            config.mHeight = 2180; 
-        } else if(devs.at(camera_id_0).badge == "zedx_ar0234") {
-            std::cout << "ZED One GS detected!" << std::endl;
-            config.mFPS = 30;
-            config.mWidth = 1920;
-            config.mHeight = 1200; 
-        }
-
-    } else {
-        std::cerr << "No cameras detected" << std::endl;
-        return -1;
-    }
-
     config.mDeviceId = camera_id_0;
     config.verbose_level = 3;
 
@@ -119,33 +145,7 @@ int main(int argc, char *argv[]) {
     oc::ArgusBayerCapture camera_0, camera_1;
     oc::ARGUS_STATE state = camera_0.openCamera(config);
     oc::ARGUS_STATE state_isx031 = camera_1.openCamera(config_1);
-    /*
-    enum class ARGUS_STATE {
-        OK,
-        ALREADY_OPEN,
-        I2C_COMM_FAILED,
-        INVALID_CAMERA_PROVIDER,
-        INVALID_DEVICE_ENUMERATION,
-        NO_CAMERA_AVAILABLE,
-        INVALID_CAMERA_PROPERTIES,
-        INVALID_CAMERA_SN,
-        INVALID_CAPTURE_SESSION,
-        INVALID_OUTPUT_STREAM_SETTINGS,
-        INVALID_STREAM_CREATION,
-        INVALID_FRAME_CONSUMER,
-        INVALID_CAPTURE_REQUEST,
-        INVALID_OUTPUT_STREAM_REQUEST,
-        INVALID_SOURCE_CONFIGURATION,
-        CANNOT_START_STREAM_REQUEST,
-        CONNECTION_TIMEOUT,
-        CAPTURE_TIMEOUT,
-        CAPTURE_FAILURE,
-        CAPTURE_UNSYNC,
-        CAPTURE_CONVERT_FAILURE,
-        UNSUPPORTED_FCT,
-        UNKNOWN
-    };
-    */
+
     if (state != oc::ARGUS_STATE::OK) {
         std::cerr << "Failed to open Camera, error code " << ARGUS_STATE2str(state) << std::endl;
         return -1;
@@ -160,9 +160,6 @@ int main(int argc, char *argv[]) {
     std::cout << "The calibration requires a checkerboard of known characteristics" << std::endl;
     std::cout << "Expected checkerboard square size are " << target_w << "x" << target_h << " " << square_size << "mm" << std::endl;
     std::cout << "Change those values in the code depending on your checkerboard !" << std::endl;
-
-    cv::Mat rgb = cv::Mat(config.mHeight, config.mWidth, CV_8UC4, 1);
-    cv::Mat rgb_isx031 = cv::Mat(config_1.mHeight, config_1.mWidth, CV_8UC4, 1);
 
     cv::Mat rgb_d, rgb2_d, rgb_d_fill;
     bool start_calibration = false;
@@ -191,29 +188,52 @@ int main(int argc, char *argv[]) {
     bool coverage_mode = false;
     bool calibration_done = false;
     bool very_first_image=true;
+    bool missing_left_target_on_last_pic = false;
+    bool missing_right_target_on_last_pic = false;
+
+    cv::Mat rgb_l;
+    cv::Mat rgb_r;
+
+    //Start image grabber Left and Right
+    std::thread runner_left(ingestImageInQueue,std::ref(camera_0),0);
+    std::thread runner_right(ingestImageInQueue,std::ref(camera_1),1);
+
+
+    // Number of area to fill 4 horizontally
+    bucketsize = camera_0.getWidth()/4;
+
     while (key != 'q') {
-        if (camera_0.isNewFrame() && camera_1.isNewFrame()) {
-            memcpy(rgb.data, camera_0.getPixels(), camera_0.getWidth() * camera_0.getHeight() * camera_0.getNumberOfChannels());
-            memcpy(rgb_isx031.data, camera_1.getPixels(), camera_1.getWidth() * camera_1.getHeight() * camera_1.getNumberOfChannels());
+        if (SyncCameraPair(rgb_l,rgb_r)==0) {
 
-
-            cv::resize(rgb, rgb_d, display_size);
-            cv::resize(rgb_isx031, rgb2_d, display_size);
+            cv::resize(rgb_l, rgb_d, display_size);
+            cv::resize(rgb_r, rgb2_d, display_size);
 
             if (!angle_clb && !calibration_done) {
                 cv::Mat rgb_with_lack_of_pts;
                 std::vector<cv::Mat> channels;
-                cv::split(rgb, channels);
-                cv::Mat blank = cv::Mat::zeros(cv::Size(config.mWidth, config.mHeight), CV_8UC1);
+                cv::split(rgb_l, channels);
+                cv::Mat blank = cv::Mat::zeros(cv::Size(camera_0.getWidth(), camera_0.getHeight()), CV_8UC1);
+                float x_end,y_end;
+                float x_max = 0;
                 for (int i = 0; i < square_valid.size(); i++) {
-                    cv::rectangle(blank, square_valid.at(i), cv::Point(square_valid.at(i).x + bucketsize, square_valid.at(i).y + bucketsize), cv::Scalar(128, 0, 128), -1);
+                    if(square_valid.at(i).x + bucketsize > blank.size[1])
+                        x_end = blank.size[1];
+                    else
+                        x_end = square_valid.at(i).x + bucketsize;
+                    if(square_valid.at(i).y + bucketsize > blank.size[0])
+                        y_end = blank.size[0];
+                    else
+                        y_end = square_valid.at(i).y + bucketsize;
+                    if(square_valid.at(i).x>x_max)
+                        x_max = square_valid.at(i).x;
+                    cv::rectangle(blank, square_valid.at(i), cv::Point(x_end, y_end), cv::Scalar(128, 0, 128), -1);
                 }
                 channels[0] = channels[0] - blank;
                 channels[2] = channels[2] - blank;
                 cv::merge(channels, rgb_with_lack_of_pts);
                 cv::resize(rgb_with_lack_of_pts, rgb_d_fill, display_size);
             } else {
-                cv::resize(rgb, rgb_d_fill, display_size);
+                cv::resize(rgb_l, rgb_d_fill, display_size);
             }
 
             cv::Mat display, display_info;
@@ -234,6 +254,11 @@ int main(int argc, char *argv[]) {
                     cv::putText(display_info, std::string("Expected checkerboard " + std::to_string(target_w) + "x" + std::to_string(target_h) + " " + ss.str() +"mm").c_str(), cv::Point(10, 20), cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(200,0,0), 2);
                     cv::putText(display_info, std::string("Make sure the Left and Right images are not inverted!").c_str(), cv::Point(10, 40), cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(200,0,0), 2);
                 }
+                if(missing_right_target_on_last_pic)
+                    cv::putText(display_info, "Missing target on image right", cv::Point(10, display.size[0]+105), cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0,0,200), 2);
+                if(missing_left_target_on_last_pic)
+                    cv::putText(display_info, "Missing target on image left", cv::Point(10, display.size[0]+80), cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0,0,200), 2);
+
                 cv::putText(display_info, "Press 's' to save an image", cv::Point(10, display.size[0]+25), cv::FONT_HERSHEY_SIMPLEX, 0.8, info_color, 2);
                 if(coverage_mode)
                     cv::putText(display_info, "Keep going until the green covers the image, it represents coverage", cv::Point(10, display.size[0]+55), cv::FONT_HERSHEY_SIMPLEX, 0.6, info_color, 1);
@@ -248,21 +273,32 @@ int main(int argc, char *argv[]) {
 
             if (!calibration_done && key == 's') {
                 if (!angle_clb) coverage_mode = true;
-                std::vector<cv::Point2f> pts_;
-                bool find_l = cv::findChessboardCorners(rgb, cv::Size(target_w, target_h), pts_, 3);
+                std::vector<cv::Point2f> pts_l,pts_r;
+                bool find_l = cv::findChessboardCorners(rgb_l, cv::Size(target_w, target_h), pts_l, 3);
+                bool find_r = cv::findChessboardCorners(rgb_r, cv::Size(target_w, target_h), pts_r, 3);
 
-                if (find_l) {
+                if(!find_r)
+                    missing_right_target_on_last_pic = true;
+                else
+                    missing_right_target_on_last_pic = false;
+                if(!find_l)
+                    missing_left_target_on_last_pic = true;
+                else
+                    missing_left_target_on_last_pic = false;
+
+
+                if (find_l && find_r) {
                     very_first_image = false;
                     if (!angle_clb) {
-                        pts_detected.push_back(pts_);
-                        cov_left = 100 * CheckCoverage(pts_detected, cv::Size(config.mWidth, config.mHeight));
+                        pts_detected.push_back(pts_l);
+                        cov_left = CheckCoverage(pts_detected, cv::Size(camera_0.getWidth(), camera_0.getHeight()));
                         pts_obj_tot.push_back(pts_obj_);
-                        std::cout << "coverage : " << cov_left << std::endl;
-                        if (cov_left < 10) {
+                        std::cout << "coverage : " << (1-cov_left)*100 << "%" << std::endl;
+                        if (cov_left < 0.1) {
                             cv::Mat rvec(1, 3, CV_64FC1);
                             cv::Mat tvec(1, 3, CV_64FC1);
-                            float err = cv::calibrateCamera(pts_obj_tot, pts_detected, cv::Size(config.mWidth, config.mHeight), K_left, D_left, r_left, t_left);
-                            bool find_ = cv::solvePnP(pts_obj_, pts_, K_left, D_left, rvec, tvec, false, cv::SOLVEPNP_ITERATIVE);
+                            float err = cv::calibrateCamera(pts_obj_tot, pts_detected, cv::Size(camera_0.getWidth(), camera_0.getHeight()), K_left, D_left, r_left, t_left);
+                            bool find_ = cv::solvePnP(pts_obj_, pts_l, K_left, D_left, rvec, tvec, false, cv::SOLVEPNP_ITERATIVE);
 
                             checker.rot_x_min = rvec.at<double>(0) * 180 / M_PI;
                             checker.rot_x_max = rvec.at<double>(0) * 180 / M_PI;
@@ -279,19 +315,21 @@ int main(int argc, char *argv[]) {
                     } else {
                         cv::Mat rvec(1, 3, CV_64FC1);
                         cv::Mat tvec(1, 3, CV_64FC1);
-                        pts_detected.push_back(pts_);
-                        bool find_ = cv::solvePnP(pts_obj_, pts_, K_left, D_left, rvec, tvec, false, cv::SOLVEPNP_ITERATIVE);
+                        pts_detected.push_back(pts_l);
+                        bool find_ = cv::solvePnP(pts_obj_, pts_l, K_left, D_left, rvec, tvec, false, cv::SOLVEPNP_ITERATIVE);
                         if (find_) {
                             checkRT(checker, rvec, tvec);
                         }
                     }
+
                 }
 
                 // saves the images
-                cv::imwrite(folder + "image_left_" + std::to_string(image_count) + ".png", rgb);
-                cv::imwrite(folder + "image_right_" + std::to_string(image_count) + ".png", rgb_isx031);
+                cv::imwrite(folder + "image_left_" + std::to_string(image_count) + ".png", rgb_l);
+                cv::imwrite(folder + "image_right_" + std::to_string(image_count) + ".png", rgb_r);
                 std::cout << "images created." << std::endl;
                 image_count++;
+
             } else if (start_calibration) {
                 int err = TryCalibration(folder, target_w, target_h, square_size);
                 if (err == 0) {
@@ -303,6 +341,7 @@ int main(int argc, char *argv[]) {
                     std::cout << "CALIBRATION fail" << std::endl;
                 }
             }
+
         } else
             usleep(100);
 
@@ -311,6 +350,11 @@ int main(int argc, char *argv[]) {
     }
     camera_0.closeCamera();
     camera_1.closeCamera();
+
+
+    runner_left.join();
+    runner_right.join();
+
 
     return 0;
 
@@ -322,7 +366,6 @@ inline float interpolate(float x, float x0, float x1, float y0=0, float y1=100) 
     interpolatedValue = (interpolatedValue < y0) ? y0 : ((interpolatedValue > y1) ? y1 : interpolatedValue); // clamp
     return interpolatedValue;
 }
-
 
 bool writeTextCenter(cv::Mat& image, float rot_x, float rot_y, float rot_z, float distance,  int fontSize) {
     bool status = false;
@@ -420,8 +463,8 @@ int TryCalibration(std::string folder, int target_w, int target_h, float square_
 
     while (!cv::imread(folder + "image_left_" + std::to_string(img_number) + ".png").empty()) {
         std::cout << "Reading img in folder : " + folder + "image_left_" + std::to_string(img_number) + ".png" << std::endl;
-        cv::Mat right_image = cv::imread(folder + "image_left_" + std::to_string(img_number) + ".png");
-        cv::Mat left_image = cv::imread(folder + "image_right_" + std::to_string(img_number) + ".png");
+        cv::Mat left_image = cv::imread(folder + "image_left_" + std::to_string(img_number) + ".png");
+        cv::Mat right_image = cv::imread(folder + "image_right_" + std::to_string(img_number) + ".png");
         if (!left_image.empty() && !right_image.empty()) {
             if (imageSize.width == 0)
                 imageSize = cv::Size(left_image.size[1], left_image.size[0]);
@@ -486,8 +529,8 @@ int TryCalibration(std::string folder, int target_w, int target_h, float square_
     float cov_left = CheckCoverage(pts_l, imageSize);
     float cov_right = CheckCoverage(pts_r, imageSize);
 
-    std::cout << "coverage left : " << cov_left * 100 << std::endl;
-    std::cout << "coverage right : " << cov_right * 100 << std::endl;
+    std::cout << "coverage left : " << (1-cov_left) * 100 << "%" << std::endl;
+    std::cout << "coverage right : " << (1-cov_right) * 100 << "%"  << std::endl;
 
     if (pts_l.size() < MIN_IMAGE)
         std::cout << "Not enough images with the target detected" << std::endl;
@@ -496,7 +539,7 @@ int TryCalibration(std::string folder, int target_w, int target_h, float square_
         cv::Mat intrinsic_l, intrinsic_r, distortion_l, distortion_r;
         cv::Mat R_, T, r_, E_, F_;
 
-        int flag = cv::CALIB_RATIONAL_MODEL;
+        int flag = cv::CALIB_ZERO_DISPARITY;//cv::CALIB_RATIONAL_MODEL;
         float err = cv::stereoCalibrate(object_points, pts_l, pts_r, intrinsic_l, distortion_l, intrinsic_r, distortion_r, imageSize,
                 R_, T, E_, F_, flag, cv::TermCriteria(cv::TermCriteria::COUNT + cv::TermCriteria::EPS, 1000, 0.001));
 
@@ -747,72 +790,25 @@ float CheckCoverage(std::vector<std::vector<cv::Point2f>> pts, cv::Size imgSize)
     float tot = 0;
     float error = 0;
 
-    cv::Mat image(imgSize.height, imgSize.width, CV_8UC3, cv::Scalar(50, 50, 50)); // Image noire de taille 500x500
-
     while (min_h_ < imgSize.height) {
-        if (max_h_ > imgSize.height) {
+        if (max_h_ > imgSize.height)
             max_h_ = imgSize.height;
-            max_w_ = bucketsize;
-            min_w_ = 0;
-            while (max_h_ < imgSize.width) {
-                if (max_w_ > imgSize.width) {
-                    max_w_ = imgSize.width;
-                    if (!CheckBucket(min_h_, max_h_, min_w_, max_w_, true, pts)) {
-                        cv::rectangle(image, cv::Point(min_w_, min_h_), cv::Point(max_w_, max_h_), cv::Scalar(0, 125, 0), -1); // Carré rouge à (100, 100) avec une taille de 50x50
-                        error++;
-                    } else
-                        square_valid.push_back(cv::Point(min_w_, min_h_));
+        max_w_ = bucketsize;
+        min_w_ = 0;
+        while (min_w_ < imgSize.width) {
+            if (max_w_ > imgSize.width)
+                max_w_ = imgSize.width;
+            if (!CheckBucket(min_h_, max_h_, min_w_, max_w_, true, pts)) {
+                error++;
+            } else
+                square_valid.push_back(cv::Point(min_w_, min_h_));
+            min_w_ += bucketsize;
+            max_w_ += bucketsize;
+            tot++;
 
-
-                    min_w_ += bucketsize;
-                    max_w_ += bucketsize;
-                    tot++;
-                } else {
-                    if (!CheckBucket(min_h_, max_h_, min_w_, max_w_, true, pts)) {
-                        cv::rectangle(image, cv::Point(min_w_, min_h_), cv::Point(max_w_, max_h_), cv::Scalar(0, 125, 0), -1); // Carré rouge à (100, 100) avec une taille de 50x50
-                        error++;
-                    } else
-                        square_valid.push_back(cv::Point(min_w_, min_h_));
-
-
-                    min_w_ += bucketsize;
-                    max_w_ += bucketsize;
-                    tot++;
-                }
-            }
-            min_h_ += bucketsize;
-            max_h_ += bucketsize;
-        } else {
-            max_w_ = bucketsize;
-            min_w_ = 0;
-            while (max_w_ < imgSize.width) {
-                //            if(!CheckBucket(min_h_,max_h_,min_w_,max_w_,true,pts)||!CheckBucket(min_h_,max_h_,min_w_,max_w_,false,pts))
-                //                error++;
-                if (!CheckBucket(min_h_, max_h_, min_w_, max_w_, true, pts)) {
-                    cv::rectangle(image, cv::Point(min_w_, min_h_), cv::Point(max_w_, max_h_), cv::Scalar(0, 125, 0), -1); // Carré rouge à (100, 100) avec une taille de 50x50
-                    error++;
-                }//            else if(!CheckBucket(min_h_,max_h_,min_w_,max_w_,false,pts))
-                    //            {
-                    //                cv::rectangle(image, cv::Point(min_w_, min_h_), cv::Point(max_w_, max_h_), cv::Scalar(125, 0, 0), -1); // Carré rouge à (100, 100) avec une taille de 50x50
-                    //                error++;
-                    //            }
-                else
-                    square_valid.push_back(cv::Point(min_w_, min_h_));
-
-
-                min_w_ += bucketsize;
-                max_w_ += bucketsize;
-                tot++;
-            }
-            min_h_ += bucketsize;
-            max_h_ += bucketsize;
         }
-    }
-
-    for (int i = 0; i < pts.size(); i++) {
-        for (int j = 0; j < pts.at(i).size(); j++) {
-            cv::circle(image, pts.at(i).at(j), 4, cv::Scalar(0, 0, 255), -1);
-        }
+        min_h_ += bucketsize;
+        max_h_ += bucketsize;
     }
     return error / tot;
 }
@@ -849,5 +845,120 @@ void checkRT(extrinsic_checker& checker_, cv::Mat r, cv::Mat tvec) {
     std::cout << "rot y : " << checker_.rot_y_delta << std::endl;
     std::cout << "rot z : " << checker_.rot_z_delta << std::endl;
     std::cout << "dist : " << checker_.distance_tot << std::endl;
+
+}
+
+
+
+int SyncCameraPair(cv::Mat &rgb_l,cv::Mat &rgb_r)
+
+{
+  //  Get Queue size and return if empty (no new frame)
+  int maxSizeLeftQueue = 0, maxSizeRightQueue = 0;
+  {
+    std::lock_guard<std::mutex> guard_l(mutex_internal[0]);
+    maxSizeLeftQueue = imageCaptureQueue[0].size();
+  }
+  {
+    std::lock_guard<std::mutex> guard_r(mutex_internal[1]);
+    maxSizeRightQueue = imageCaptureQueue[1].size();
+  }
+
+  if (maxSizeLeftQueue<=0 || maxSizeRightQueue<=0)
+    return 1;
+
+  /////////////// Timestamp Synchronisation mechanism //////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////////////
+  SyncMat* tmpImageTryLeft;
+  SyncMat* tmpImageTryRight;
+  bool found_in_right_queue = false;
+
+  int iLTarget = 1;//maxSizeLeftQueue;
+  int iRtarget = 1;//maxSizeRightQueue;
+  // How this is done : //
+  // Take last argusImage on the left queue (at the time it was lock).
+  // Try to find the sync argusImage on the right queue started from the last image in queue. Then increase the counter if not found.
+  // If no right image found, then increase the left counter in queue so that we take the last - 1 then retry.... until no image in queue.
+  // If we found a right image that fits. break and output images.
+  // At the end , free all the remaining queue since it won't be used (previous timestamp).
+  do
+    {
+      {
+        std::lock_guard<std::mutex> guard(mutex_internal[0]);
+        if (maxSizeLeftQueue-iLTarget<0 || maxSizeLeftQueue-iLTarget>=imageCaptureQueue[0].size())
+          return 1;
+
+        tmpImageTryLeft = imageCaptureQueue[0].at(maxSizeLeftQueue-iLTarget);
+      }
+      uint64 targetTS = tmpImageTryLeft->ts;
+      found_in_right_queue = false;
+      uint64 rightTS = 0;
+
+      do
+        {
+          {
+            std::lock_guard<std::mutex> guard(mutex_internal[1]);
+            if (maxSizeRightQueue-iRtarget<0 || maxSizeRightQueue-iRtarget>=imageCaptureQueue[1].size())
+              return 1;
+
+            tmpImageTryRight = imageCaptureQueue[1].at(maxSizeRightQueue-iRtarget);
+          }
+          rightTS = tmpImageTryRight->ts;
+          if (abs((long long)rightTS-(long long)targetTS)<=2000) //SyncDiff must be lower than 2000us
+            {
+              found_in_right_queue = true;
+              break;
+            }
+          iRtarget++;
+          usleep(100);
+        }
+      while(maxSizeRightQueue-iRtarget>=0);
+
+
+      if (found_in_right_queue)
+        {
+          {
+          std::lock_guard<std::mutex> guardL(mutex_internal[0]);
+          std::lock_guard<std::mutex> guardR(mutex_internal[1]);
+          tmpImageTryLeft->rgb_img.copyTo(rgb_l);
+          tmpImageTryRight->rgb_img.copyTo(rgb_r);
+          }
+          break;
+        }
+      iRtarget = 1;
+      iLTarget++;
+    }
+  while(maxSizeLeftQueue-iLTarget>=0);
+
+
+  //Not found... No new frame sync
+  if (!found_in_right_queue)
+    {
+      return 1;
+    }
+
+
+  ///empy all the queue before it will not be used. //
+  {
+    std::lock_guard<std::mutex> guard_l(mutex_internal[0]);
+    for (int p=0;p<=maxSizeLeftQueue-iLTarget;p++)
+      {
+        SyncMat* tmp  = imageCaptureQueue[0].front();
+        SAFE_DELETE(tmp)
+        imageCaptureQueue[0].pop_front();
+      }
+  }
+
+  {
+    std::lock_guard<std::mutex> guard_r(mutex_internal[1]);
+    for (int p=0;p<=maxSizeRightQueue-iRtarget;p++)
+      {
+        SyncMat* tmp  = imageCaptureQueue[1].front();
+        SAFE_DELETE(tmp)
+        imageCaptureQueue[1].pop_front();
+
+      }
+  }
+  return 0;
 
 }

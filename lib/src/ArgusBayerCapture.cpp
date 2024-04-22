@@ -525,11 +525,23 @@ ARGUS_STATE ArgusBayerCapture::openCamera(const ArgusCameraConfig &config,bool r
   /// Save configuration as it's OK
   width = mConfig.mWidth;
   height = mConfig.mHeight;
-  nChannel = mConfig.mChannel;
+  pixel_mode = mConfig.mode;
+  nChannel = 4;
+  pixel_depth = 1;
+
+  if (mConfig.mode == PixelMode::COLOR_RGB)
+      nChannel = 3;
+
+  if (mConfig.mode == PixelMode::RAW10)
+  {
+      if (mConfig.verbose_level>0)
+        std::cout<<"[ArgusCapture] --> Invalid Pixel Mode. Only RGBA is supported" <<std::endl;
+      return ARGUS_STATE::INVALID_SOURCE_CONFIGURATION;
+  }
 
   if (mConfig.verbose_level>0)
     std::cout<<"[ArgusCapture] --> Using Resolution " <<width<<"x"<<height<<"@"<<fps<<std::endl;
-  internal_buffer_grab = (unsigned char*)malloc(width * height * nChannel);
+  internal_buffer_grab = (unsigned char*)malloc(width * height * nChannel*pixel_depth);
   if (!use_outer_buffer)
     ptr_buffer_sdk = internal_buffer_grab;
 
