@@ -8,7 +8,7 @@ if(COMMAND cmake_policy)
 endif(COMMAND cmake_policy)
 set(LIB_NAME arguscapture)
 
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_SOURCE_DIR}/cmake)
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_DEBUG_POSTFIX "d")
 
@@ -24,8 +24,6 @@ endif()
 if (CMAKE_SYSTEM_PROCESSOR MATCHES aarch64)
 set(TegraMM_LIBRARY_DIRS "/usr/lib/aarch64-linux-gnu" "/usr/lib/aarch64-linux-gnu/tegra")
 set(TegraMM_LIBRARY_DIRS_CROSSCPL "/usr/xcc/aarch64-unknown-linux-gnu/lib/aarch64-linux-gnu/tegra" "/usr/xcc/aarch64-unknown-linux-gnu/lib/aarch64-linux-gnu" "/usr/xcc/aarch64-unknown-linux-gnu/lib/" "${cross_root}/lib")
-link_directories(${TegraMM_LIBRARY_DIRS})
-link_directories(${TegraMM_LIBRARY_DIRS_CROSSCPL})
 SET(SPECIAL_OS_LIBS v4l2 nvargus_socketclient nvbufsurftransform nvbufsurface EGL pthread)
 SET(NATIV_CMD "find /usr/lib/aarch64-linux-gnu/ -type f -name libnvbuf_utils* 2> /dev/null")
 SET(CROSS_CMD "find /usr/xcc/aarch64-unknown-linux-gnu/ -type f -name libnvbuf_utils* 2> /dev/null")
@@ -72,6 +70,10 @@ ENDIF()
 ### Add sources for library
 add_library(${LIB_NAME} SHARED ${ARGUS_CAPTURE_SRC} ${ARGUS_CAPTURE_HDR} ${TegraMM_COMMON_SOURCES})
 ### Link library with deps
+target_link_directories(${LIB_NAME} PUBLIC
+  ${TegraMM_LIBRARY_DIRS} 
+  ${TegraMM_LIBRARY_DIRS_CROSSCPL}
+)
 target_link_libraries(${LIB_NAME} ${SPECIAL_OS_LIBS})
 
 set(ARGUSCAPTURE_PUBLIC_INCLUDE_FILES "include/ArgusCapture.hpp")
@@ -82,6 +84,7 @@ set_target_properties(${LIB_NAME}
     PROPERTIES
     PUBLIC_HEADER "${ARGUSCAPTURE_PUBLIC_INCLUDE_FILES}"
 )
+
 
 install(TARGETS ${LIB_NAME}
   RUNTIME DESTINATION ${ARGUS_CAPTURE_LIB_DIR}
