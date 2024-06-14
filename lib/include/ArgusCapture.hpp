@@ -106,6 +106,7 @@ public:
     uint32_t mHeight=0;
     uint32_t mFPS=0;
     PixelMode mode = PixelMode::COLOR_RGBA;
+    bool hdr = false;
     bool mSwapRB = false; //swap for RGB(A) or BGR(A) output. Not available for RAW10
     int verbose_level = 0;
 };

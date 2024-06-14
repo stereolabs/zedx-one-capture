@@ -41,6 +41,7 @@ int main(int argc, char *argv[]) {
     config.mWidth = rq_width;
     config.mHeight = rq_height;
     config.verbose_level = 3;
+    config.hdr = false;
 
     /// Open the camera
     oc::ArgusBayerCapture camera_0;

@@ -349,13 +349,30 @@ ARGUS_STATE ArgusBayerCapture::openCamera(const ArgusCameraConfig &config,bool r
       ISensorMode* ssmode = Argus::interface_cast<Argus::ISensorMode>(sensorModes[k]);
       int s_width = ssmode->getResolution().width();
       int s_height = ssmode->getResolution().height();
-      if (mConfig.mWidth==s_width && mConfig.mHeight == s_height)
-        {
-          m_sensor_mode = k;
-          if (mConfig.mFPS==0)
-              mConfig.mFPS = ONE_SECOND_NANOS/ssmode->getFrameDurationRange().min();
-          break;
-        }
+      int hdr_ratio_max = ssmode->getHdrRatioRange().max();
+//      std::cout << " mode " << std::to_string(k) << "\nWidth = " << s_width << "\nHeight = " << s_height << "\nHDR ratio range : "<< ssmode->getHdrRatioRange().max() << std::endl;
+
+
+      if(mConfig.hdr)
+      {
+          if (mConfig.mWidth==s_width && mConfig.mHeight == s_height && hdr_ratio_max > 1)
+            {
+              m_sensor_mode = k;
+              if (mConfig.mFPS==0)
+                  mConfig.mFPS = ONE_SECOND_NANOS/ssmode->getFrameDurationRange().min();
+              break;
+            }
+      }
+      else
+      {
+          if (mConfig.mWidth==s_width && mConfig.mHeight == s_height )
+            {
+              m_sensor_mode = k;
+              if (mConfig.mFPS==0)
+                  mConfig.mFPS = ONE_SECOND_NANOS/ssmode->getFrameDurationRange().min();
+              break;
+            }
+      }
     }
   }
 
