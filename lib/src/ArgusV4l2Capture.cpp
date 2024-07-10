@@ -529,6 +529,7 @@ int ArgusV4l2Capture::convert(int dmabuf_fd,int plane,argusMonoImage& image)
         return -1;
     }
 
+
     image.pitch = 2*parm.planes[0].width;//parm.planes[plane].pitch;
     image.imageData = (uint8_t*)malloc(parm.planes[0].pitch*parm.planes[0].height);
     int c_res = NvBufSurface2Raw(surf,0,0,parm.planes[0].width,parm.planes[0].height,image.imageData);
@@ -603,7 +604,7 @@ void ArgusV4l2Capture::produce()
             argusMonoImage newImage = {0};
             newImage.imageTimestamp =fromtimeval(v4l2_buf.timestamp);
             int c_res= -1;
-            if (pixel_mode == PixelMode::COLOR_RGB || PixelMode::COLOR_RGBA)
+            if (pixel_mode == PixelMode::COLOR_RGB || pixel_mode == PixelMode::COLOR_RGBA)
             {
                 /*  Convert the camera buffer from YUV422 to RGBA */
                 if (NvBufSurf::NvTransform(&transform_params, ctx.g_buff[v4l2_buf.index].dmabuff_fd, mCvtfd))
