@@ -18,7 +18,7 @@ int target_h = 6;
 float square_size = 25.0; // mm
 ```
 
-> **Note:*** the target Width and the target Height corresponds to the number of inner edges, not to the number of outer squares.
+> **Note:** the target Width and the target Height corresponds to the number of inner edges, not to the number of outer squares.
 
 ## Perform the calibration
 
@@ -26,7 +26,7 @@ The calibration process uses images saved manually with the chessboard visible a
 
 When calibrating, make sure the calibration pattern is seen in all the field of view of the camera along the process.
 
-> Note: if the calibration tool seems frozen, just wait for a few seconds that the elaboration is completed. We recommend using the `MAXN` power mode 
+> **Note:** if the calibration tool seems frozen, just wait for a few seconds that the elaboration is completed. We recommend using the `MAXN` power mode 
 and run the `jetson_clocks` script to boost the elaborations.
 
 ### Step 1: move the chessboard
