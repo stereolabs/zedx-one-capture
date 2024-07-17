@@ -6,7 +6,7 @@ A calibration pattern is required, the bigger, the better. As a starting point a
 
 ![Opencv Checkerboard](checkerboard_sample.png)
 
-Other chessboard can be generated using OpenCV scripts https://docs.opencv.org/4.x/da/d0d/tutorial_camera_calibration_pattern.html
+Other chessboards can be generated using OpenCV scripts https://docs.opencv.org/4.x/da/d0d/tutorial_camera_calibration_pattern.html
 
 Before starting the calibration be sure to customize the code according to the type of calibration board you are using:
 
@@ -17,13 +17,13 @@ int target_w = 9; // number of horizontal inner edges
 int target_h = 6; // number of vertical inner edges
 float square_size = 25.0; // mm
 ```
-> **Note:** the target Width and the target Height corresponds to the number of inner edges, not to the number of outer squares.
+> **Note:** The target Width and the target Height corresponds to the number of inner edges, not to the number of outer squares.
 
 ![Opencv Checkerboard](./.assets/checkerboard_sample_count.png)
 
 ## Perform the calibration
 
-The calibration process uses images saved manually with the chessboard visible and at different position each time in the image.
+The calibration process uses images saved manually with the chessboard visible and at different positions each time in the image.
 
 When calibrating, make sure the calibration pattern is seen in all the field of view of the camera along the process.
 
@@ -37,7 +37,7 @@ Each time you save a frame, the tool calculates the area of the image covered by
 
 ### Step 2: rotate the chessboard
 
-Move the chessboard away/close to the camera and rotate it around the three main axis.
+Move the chessboard away/close to the camera and rotate it around the three main axes.
 
 The chessboard needs to be rotated around each axis at different distances. The GUI will indicate which axis should be further adjusted.
 
@@ -59,4 +59,4 @@ Read the [detailed documentation](https://www.stereolabs.com/docs/get-started-wi
 
 This video tutorial demonstrates the necessary steps to achieve a valid calibration.
 
-[![Video Tutorial](https://img.youtube.com/vi/Dd-4_eUdkSM/0.jpg)](https://www.youtube.com/watch?v=Dd-4_eUdkSM)
+https://github.com/user-attachments/assets/80ab417f-8226-4fc9-a0fc-3892cce56de9
