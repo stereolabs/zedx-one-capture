@@ -206,7 +206,7 @@ int main(int argc, char *argv[]) {
     while (key != 'q') {
         if (SyncCameraPair(rgb_l,rgb_r)==0) {
 
-            if(rgb_l.rows==0 || rgb_r.cols==0 ||
+            if(rgb_l.rows==0 || rgb_l.cols==0 ||
             rgb_r.rows==0 || rgb_r.cols==0)
                 continue;
 
