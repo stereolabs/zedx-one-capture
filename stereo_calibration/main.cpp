@@ -15,8 +15,8 @@
 
 // CHANGE THIS PARAM BASED ON THE CHECKERBOARD USED
 // https://docs.opencv.org/4.x/da/d0d/tutorial_camera_calibration_pattern.html
-int target_w = 9; // number of inner squares
-int target_h = 6;
+int target_w = 9; // number of horizontal inner edges
+int target_h = 6; // number of vertical inner edges
 float square_size = 25.0; // mm
 
 std::string folder = "/tmp/zed-one/image/";
@@ -63,6 +63,7 @@ void ingestImageInQueue(oc::ArgusBayerCapture &camera,int side)
         {
             std::lock_guard<std::mutex> guard(mutex_internal[side]);
             cv::Mat rgb = cv::Mat(camera.getHeight(), camera.getWidth(), CV_8UC4, 1);
+
             memcpy(rgb.data, camera.getPixels(), camera.getWidth() * camera.getHeight() * camera.getNumberOfChannels());
             SyncMat* img = new SyncMat();
             rgb.copyTo(img->rgb_img);
@@ -204,6 +205,9 @@ int main(int argc, char *argv[]) {
 
     while (key != 'q') {
         if (SyncCameraPair(rgb_l,rgb_r)==0) {
+
+            if(rgb_l.area()==0 || rgb_r.area()==0)
+                continue;
 
             cv::resize(rgb_l, rgb_d, display_size);
             cv::resize(rgb_r, rgb2_d, display_size);
