@@ -17,7 +17,7 @@
 // https://docs.opencv.org/4.x/da/d0d/tutorial_camera_calibration_pattern.html
 int target_w = 9; // number of horizontal inner edges
 int target_h = 6; // number of vertical inner edges
-float square_size = 24.0; // mm
+float square_size = 25.0; // mm
 
 std::string folder = "/tmp/zed-one/image/";
 std::string output_filename = "SN_ZEDONES.conf";
