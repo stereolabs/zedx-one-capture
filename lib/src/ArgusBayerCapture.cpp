@@ -61,6 +61,46 @@ Argus::AcRegion convertACRegion(oc::Rect roi)
   return reg;
 }
 
+inline void changeBit(unsigned char & number, int x, int n)
+{
+    number = number & ~(1 << n) | (x << n);
+}
+
+inline int getBit(unsigned char number, int k)
+{
+    return (number >> k) & 1;
+}
+
+inline unsigned char* SerializeUInt32(uint32_t val)
+{
+    unsigned char *a;
+    a = (unsigned char*)calloc(4, sizeof(unsigned char));
+    std::memcpy((unsigned char*)a, (unsigned char*)&val, 4);
+    return a;
+}
+
+inline uint32_t ParseUInt32(const unsigned char (&buf)[4])
+{
+    uint32_t val;
+    std::memcpy((unsigned char*)&val,(unsigned char*)buf, 4);
+    return val;
+}
+
+inline unsigned char* SerializeUInt16(uint16_t val)
+{
+    unsigned char *a;
+    a = (unsigned char*)calloc(2, sizeof(unsigned char));
+    std::memcpy((unsigned char*)a, (unsigned char*)&val, 2);
+    return a;
+}
+
+inline uint16_t ParseUInt16(const unsigned char (&buf)[2])
+{
+    uint16_t val;
+    std::memcpy((unsigned char*)&val,(unsigned char*)buf, 2);
+    return val;
+}
+
 
 std::vector<oc::ArgusDevice> ArgusBayerCapture::getArgusDevices()
 {
@@ -125,7 +165,14 @@ std::vector<oc::ArgusDevice> ArgusBayerCapture::getArgusDevices()
       char syncSensorId[MAX_MODULE_STRING];
       const Ext::ISyncSensorCalibrationData* iSyncSensorCalibrationData =interface_cast<const Ext::ISyncSensorCalibrationData>(device_);
       if (iSyncSensorCalibrationData)
+      {
         iSyncSensorCalibrationData->getSyncSensorModuleId(syncSensorId, sizeof(syncSensorId));
+        unsigned char moduleSerialNumber[MAX_MODULE_STRING];
+        iSyncSensorCalibrationData->getModuleSerialNumber(moduleSerialNumber,32);
+        unsigned char sn_d[4] = {0};
+        memcpy(sn_d, moduleSerialNumber, 4);
+        prop.serial = ParseUInt32(sn_d);
+      }
       prop.name = std::string(syncSensorId);
       auto iCaptureSession = UniqueObj<CaptureSession>(iCameraProvider->createCaptureSession(devices_all->at(k),NULL));
       prop.available = iCaptureSession?true:false;

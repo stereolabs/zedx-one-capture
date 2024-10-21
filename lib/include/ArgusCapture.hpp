@@ -40,6 +40,7 @@ struct ArgusDevice
 {
    int id =0;
    bool available = false;
+   uint32_t serial = 0;
    std::string badge;
    std::string name;
 
