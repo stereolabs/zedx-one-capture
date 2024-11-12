@@ -53,8 +53,6 @@ struct SyncMat{
 std::deque<SyncMat*> imageCaptureQueue[2];
 std::mutex mutex_internal[2];
 
-
-
 void ingestImageInQueue(oc::ArgusBayerCapture &camera,int side)
 {
     while(camera.isOpened())
@@ -179,17 +177,6 @@ int main(int argc, char *argv[]) {
     }
 
     std::vector<std::vector < cv::Point3f>> pts_obj_tot;
-
-    // Check if the temp image folder exists and clear it
-    if (fs::exists(folder)) {
-        std::uintmax_t n{fs::remove_all(folder)};
-    }
-    // Create the temp image folder
-    if(!fs::create_directories(folder)) 
-    {
-        std::cerr << "Error creating storage folder!";
-        exit(EXIT_FAILURE);
-    }
 
     auto display_size = cv::Size(1280*0.75, 720*0.75);
 
@@ -318,8 +305,9 @@ int main(int argc, char *argv[]) {
                         if (cov_left < 0.1) {
                             cv::Mat rvec(1, 3, CV_64FC1);
                             cv::Mat tvec(1, 3, CV_64FC1);
-                            float err = cv::calibrateCamera(pts_obj_tot, pts_detected, cv::Size(camera_0.getWidth(), camera_0.getHeight()), K_left, D_left, r_left, t_left);
-                            bool found_ = cv::solvePnP(pts_obj_, pts_l, K_left, D_left, rvec, tvec, false, cv::SOLVEPNP_ITERATIVE);
+                            float err = cv::calibrateCamera(pts_obj_tot, pts_detected, cv::Size(camera_0.getWidth(), camera_0.getHeight()), K_left, D_left, r_left, t_left, 0,
+                                                            cv::TermCriteria(cv::TermCriteria::COUNT + cv::TermCriteria::EPS, 20, 1e-6));
+                            bool found_ = cv::solvePnP(pts_obj_, pts_l, K_left, D_left, rvec, tvec, false, cv::SOLVEPNP_EPNP);
 
                             double rx = rvec.at<double>(0)*(180 / M_PI);
                             double ry = rvec.at<double>(1)*(180 / M_PI);
@@ -340,7 +328,7 @@ int main(int argc, char *argv[]) {
                     } else {
                         cv::Mat rvec(1, 3, CV_64FC1);
                         cv::Mat tvec(1, 3, CV_64FC1);
-                        bool found_ = cv::solvePnP(pts_obj_, pts_l, K_left, D_left, rvec, tvec, false, cv::SOLVEPNP_ITERATIVE);
+                        bool found_ = cv::solvePnP(pts_obj_, pts_l, K_left, D_left, rvec, tvec, false, cv::SOLVEPNP_EPNP);
                         if (found_) {
                             frames_rot_good = updateRT(checker, rvec, tvec);
                             if(frames_rot_good)
@@ -374,10 +362,8 @@ int main(int argc, char *argv[]) {
     camera_0.closeCamera();
     camera_1.closeCamera();
 
-
     runner_left.join();
     runner_right.join();
-
 
     return 0;
 }
@@ -406,7 +392,6 @@ bool writeRotText(cv::Mat& image, float rot_x, float rot_y, float rot_z, float d
     ss_rot_y << " / Rotation Y: " << std::fixed << std::setprecision(1) << rot_y_idx << "%   ";
     ss_rot_z << " / Rotation Z: " << std::fixed << std::setprecision(1) << rot_z_idx << "%   ";
     ss_distance << " / Distance: " << std::fixed << std::setprecision(1) << distance_idx << "%";
-
 
     std::string text1 = ss_rot_x.str();
     std::string text2 = ss_rot_y.str();
@@ -480,6 +465,17 @@ int TryCalibration(const std::string& folder, int target_w, int target_h, float 
 
     cv::Size imageSize = cv::Size(0, 0);
     int img_number = 0;
+
+    // Check if the temp image folder exists and clear it
+    if (fs::exists(folder)) {
+        std::uintmax_t n{fs::remove_all(folder)};
+    }
+    // Create the temp image folder
+    if(!fs::create_directories(folder)) 
+    {
+        std::cerr << "Error creating storage folder!";
+        return 1;
+    }
 
     std::cout << folder + "image_left_" + std::to_string(img_number) + ".png" << std::endl;
 
@@ -580,7 +576,7 @@ int TryCalibration(const std::string& folder, int target_w, int target_h, float 
         std::cout << " * Reprojection error:\t Left "<<rms_l<<" Ritght "<<rms_r<<" Stereo " << err << std::endl;
 
         if(rms_l > 0.5f || rms_r > 0.5f || err > 0.5f)
-            std::cout<<"\n\t !! Warning !!\n The reprojection error looks too high, check that the lens are clean (sharp images) and that the pattern is printed/mounted on a strong and flat surface."
+            std::cout<<"\n\t !! Warning !!\n The reprojection error looks too high, check that the lens are clean (sharp images) and that the pattern is printed/mounted on a strong and flat surface."<<std::endl;
         
         std::cout << " ** Camera parameters **" << std::endl;
         std::cout << "  * Intrinsic mat left:\t" << intrinsic_l << std::endl;
