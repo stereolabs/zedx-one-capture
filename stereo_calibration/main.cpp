@@ -714,6 +714,18 @@ bool WriteConfFile(cv::Mat& intrinsic_left, cv::Mat& intrinsic_right, cv::Mat& d
         outfile << "cx = " << intrinsic_right.at<double>(0, 2) << "\n";
         outfile << "cy = " << intrinsic_right.at<double>(1, 2) << "\n\n";
 
+        outfile << "[LEFT_CAM_QHDPLUS]\n";
+        outfile << "fx = " << intrinsic_left.at<double>(0, 0) << "\n";
+        outfile << "fy = " << intrinsic_left.at<double>(1, 1) << "\n";
+        outfile << "cx = " << intrinsic_left.at<double>(0, 2)-(3840 - 3200) / 2 << "\n";
+        outfile << "cy = " << intrinsic_left.at<double>(1, 2)-(2160 - 1800) / 2 << "\n\n";
+
+        outfile << "[RIGHT_CAM_QHDPLUS]\n";
+        outfile << "fx = " << intrinsic_right.at<double>(0, 0) << "\n";
+        outfile << "fy = " << intrinsic_right.at<double>(1, 1) << "\n";
+        outfile << "cx = " << intrinsic_right.at<double>(0, 2)-(3840 - 3200) / 2 << "\n";
+        outfile << "cy = " << intrinsic_right.at<double>(1, 2)-(2160 - 1800) / 2 << "\n\n";
+
         outfile << "[LEFT_CAM_FHD]\n";
         outfile << "fx = " << intrinsic_left.at<double>(0, 0) / 2 << "\n";
         outfile << "fy = " << intrinsic_left.at<double>(1, 1) / 2 << "\n";
@@ -768,12 +780,15 @@ bool WriteConfFile(cv::Mat& intrinsic_left, cv::Mat& intrinsic_right, cv::Mat& d
         outfile << "CV_FHD = " << rotation.at<double>(1) << "\n";
         outfile << "CV_FHD1200 = " << rotation.at<double>(1) << "\n";
         outfile << "CV_4k = " << rotation.at<double>(1) << "\n";
+        outfile << "CV_QHDPLUS = " << rotation.at<double>(1) << "\n";
         outfile << "RX_FHD = " << rotation.at<double>(0) << "\n";
         outfile << "RX_FHD1200 = " << rotation.at<double>(0) << "\n";
         outfile << "RX_4k = " << rotation.at<double>(0) << "\n";
+        outfile << "RX_QHDPLUS = " << rotation.at<double>(0) << "\n";
         outfile << "RZ_FHD = " << rotation.at<double>(2) << "\n";
         outfile << "RZ_FHD1200 = " << rotation.at<double>(2) << "\n";
         outfile << "RZ_4k = " << rotation.at<double>(2) << "\n\n";
+        outfile << "RZ_QHDPLUS = " << rotation.at<double>(2) << "\n\n";
 
         // Add other parameters for other stereo parameters if needed...
 
