@@ -176,6 +176,16 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    // Check if the temp image folder exists and clear it
+    if (fs::exists(folder)) {
+        std::uintmax_t n{fs::remove_all(folder)};
+    }
+    // Create the temp image folder
+    if(!fs::create_directories(folder)) 
+    {
+        std::cerr << "Error creating storage folder!";
+        return 1;
+    }
     std::vector<std::vector < cv::Point3f>> pts_obj_tot;
 
     auto display_size = cv::Size(1280*0.75, 720*0.75);
@@ -466,17 +476,6 @@ int TryCalibration(const std::string& folder, int target_w, int target_h, float 
     cv::Size imageSize = cv::Size(0, 0);
     int img_number = 0;
 
-    // Check if the temp image folder exists and clear it
-    if (fs::exists(folder)) {
-        std::uintmax_t n{fs::remove_all(folder)};
-    }
-    // Create the temp image folder
-    if(!fs::create_directories(folder)) 
-    {
-        std::cerr << "Error creating storage folder!";
-        return 1;
-    }
-
     std::cout << folder + "image_left_" + std::to_string(img_number) + ".png" << std::endl;
 
     while (!cv::imread(folder + "image_left_" + std::to_string(img_number) + ".png").empty()) {
@@ -611,12 +610,23 @@ int TryCalibration(const std::string& folder, int target_w, int target_h, float 
 
         std::cout << std::endl << "*** Calibration file ***" << std::endl;
         WriteConfFile(intrinsic_l, intrinsic_r, distortion_l, distortion_r, T, r_, model);
+
+        // also save it in opencv format, can also be loaded into the ZED SDK by using: sl::InitParameters::optional_opencv_calibration_file
+        cv::FileStorage fs("zed_calibration.yml", cv::FileStorage::WRITE);
+        if (fs.isOpened()) {
+            fs << "Size" << imageSize;
+            fs << "K_LEFT" << intrinsic_l<< "D_LEFT" << distortion_l << "K_RIGHT" << intrinsic_r << "D_RIGHT" << distortion_r;
+            fs << "R" << r_ << "T" << T;
+            fs.release();
+        } else
+            std::cout << "Error: can not save the extrinsic parameters\n";
+
     }
 
     return EXIT_SUCCESS;
 }
 
-bool WriteConfFile(cv::Mat& intrinsic_left, cv::Mat& intrinsic_right, cv::Mat& distortion_left, cv::Mat& distortion_right, cv::Mat& translation, cv::Mat& rotation, int model) {
+bool WriteConfFile(cv::Mat& intrinsic_left, cv::Mat& intrinsic_right, cv::Mat& distortion_left, cv::Mat& distortion_right, cv::Mat& translation, cv::Mat& rotation, int model) {    
     // Write parameters to a text file
     std::ofstream outfile(output_filename);
     if (!outfile.is_open()) {
