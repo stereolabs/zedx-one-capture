@@ -868,9 +868,11 @@ void ArgusBayerCapture::produce()
               int c_res= convert((void*)iFrameLeft,newImage);
               if (c_res==0)
                 {
+                  enterCriticalSection();
                   if (mCaptureQueue.size()>MAX_CAPTURE_QUEUE_SIZE)
                     mCaptureQueue.pop_front();
                   mCaptureQueue.push_back(newImage);
+                  exitCriticalSection();
                 }
                 else
                 mArgusGrabState = ARGUS_STATE::CAPTURE_CONVERT_FAILURE;
