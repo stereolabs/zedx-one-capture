@@ -42,6 +42,7 @@ struct ArgusDevice
    bool available = false;
    std::string badge;
    std::string name;
+   int serial_number = 0;
 
 };
 
@@ -990,8 +991,6 @@ class __attribute__((visibility("default"))) ArgusBayerCapture : public ArgusVir
     /// \return a list of device properties
     ///
     static std::vector<oc::ArgusDevice> getArgusDevices();
-
-
 
 
 protected :
