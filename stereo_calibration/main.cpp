@@ -126,6 +126,7 @@ int main(int argc, char *argv[]) {
         std::cout << " Device : " << devs.at(i).id << std::endl;
         std::cout << " Name : " << devs.at(i).name << std::endl;
         std::cout << " Badge : " << devs.at(i).badge << std::endl;
+        std::cout << " Serial Number : " << devs.at(i).serial_number << std::endl;
         std::cout << " Available : " << devs.at(i).available << std::endl;
     }
     std::cout << "***********************" << std::endl;
