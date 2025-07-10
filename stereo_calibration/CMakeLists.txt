@@ -30,6 +30,8 @@ ELSE()
     set(ARGUS_LIB arguscapture)
 ENDIF()
 
+include_directories(include/)
+
 add_executable(zedx_one_stereo_calibration main.cpp)
 target_link_libraries(zedx_one_stereo_calibration ${ARGUS_LIB} pthread ${OpenCV_LIBRARIES} ${TegraMM_LIBRARIES})
 

@@ -7,6 +7,8 @@
 #include "opencv2/opencv.hpp"
 #include <filesystem>
 #include <deque>
+#include <tuple>
+#include "include/nlohmann/json.hpp"
 
 
 #define SAFE_DELETE(e) if (e) { \
@@ -80,8 +82,7 @@ void ingestImageInQueue(oc::ArgusBayerCapture &camera,int side)
 
 int SyncCameraPair(cv::Mat &rgb_l,cv::Mat &rgb_r);
 
-
-std::map<std::string, std::string> parseArguments(int argc, char* argv[]);
+std::tuple<int, int> getStereoPairSerialNumbers(const nlohmann::json& virtual_stereo_config);
 bool writeRotText(cv::Mat& image, float rot_x, float rot_y, float rot_z, float distance, int fontSize);
 bool WriteConfFile(cv::Mat& intrinsic_left, cv::Mat& intrinsic_right, cv::Mat& distortion_left, cv::Mat& distortion_right, cv::Mat& translation, cv::Mat& rotation, int model);
 bool CheckBucket(int min_h, int max_h, int min_w, int max_w, bool min, std::vector<std::vector<cv::Point2f>> pts);
@@ -109,11 +110,39 @@ const cv::Scalar warn_color = cv::Scalar(0, 128, 255);
 
 int main(int argc, char *argv[]) {
 
-    int camera_id_0 = 0;
-    int camera_id_1 = 1;
-    if(argc > 1) {
+    int camera_id_0 = -1;
+    int camera_id_1 = -1;
+    int left_sn = 0;
+    int right_sn = 0;
+    if (argc == 1) {
+        // Default with no arguments
+        camera_id_0 = 0;
+        camera_id_1 = 1;
+    }
+    if (argc > 1 && std::string(argv[1]).find(".json") != std::string::npos) {
+        nlohmann::json virtual_stereo_config;
+        try {
+            virtual_stereo_config = nlohmann::json::parse(std::ifstream(argv[1]));
+        } catch (const std::exception& e) {
+            std::cerr << "Error parsing JSON configuration file: " << e.what() << std::endl;
+            return -1;
+        }
+
+        auto [left_serial, right_serial] = getStereoPairSerialNumbers(virtual_stereo_config);
+        if (left_serial == 0 || right_serial == 0) {
+            std::cerr << "Invalid serial numbers in the configuration file." << std::endl;
+            return -1;
+        }
+        left_sn = left_serial;
+        right_sn = right_serial;
+    }
+    else if(argc > 1) {
         camera_id_0 = atoi(argv[1]);
         camera_id_1 = atoi(argv[2]);
+        if (camera_id_0 < 0 || camera_id_1 < 0) {
+            std::cerr << "Invalid camera IDs provided. Please provide valid camera IDs." << std::endl;
+            return -1;
+        }
     }
 
     int major, minor, patch;
@@ -130,6 +159,25 @@ int main(int argc, char *argv[]) {
         std::cout << " Available : " << devs.at(i).available << std::endl;
     }
     std::cout << "***********************" << std::endl;
+
+    // Check if requested cameras are available
+    if (camera_id_0 < 0 || camera_id_1 < 0) {
+        auto left_cam = std::find_if(devs.begin(), devs.end(), [left_sn](const oc::ArgusDevice& d) { return d.available && d.serial_number == left_sn; });
+        if (left_cam == devs.end()) {
+            std::cerr << "Could not find left camera with serial number " << left_sn << "." << std::endl;
+            return -1;
+        }
+        auto right_cam = std::find_if(devs.begin(), devs.end(), [right_sn](const oc::ArgusDevice& d) { return d.available && d.serial_number == right_sn; });
+        if (right_cam == devs.end()) {
+            std::cerr << "Could not find right camera with serial number " << right_sn << "." << std::endl;
+            return -1;
+        }
+        // Found both cameras, set their IDs
+        camera_id_0 = left_cam->id;
+        camera_id_1 = right_cam->id;
+    }
+
+    std::cout << "Opening cameras with IDs: " << camera_id_0 << " and " << camera_id_1 << std::endl;
 
     oc::ArgusCameraConfig config;
 
@@ -1034,4 +1082,29 @@ int SyncCameraPair(cv::Mat &rgb_l,cv::Mat &rgb_r)
   }
   return 0;
 
+}
+
+std::tuple<int, int> getStereoPairSerialNumbers(const nlohmann::json& virtual_stereo_config) {
+    int left_serial = 0;
+    int right_serial = 0;
+
+    if (!virtual_stereo_config.is_object() && virtual_stereo_config.size() != 1) {
+        std::cerr << "Invalid configuration format. Expected an object." << std::endl;
+        return std::make_tuple(left_serial, right_serial);
+    }
+    auto conf = virtual_stereo_config.items().begin().value();
+
+    if (conf.contains("Left") && conf["Left"].is_number()) {
+        left_serial = conf["Left"].get<int>();
+    } else {
+        std::cerr << "Left camera serial number not found in configuration." << std::endl;
+    }
+
+    if (conf.contains("Right") && conf["Right"].is_number()) {
+        right_serial = conf["Right"].get<int>();
+    } else {
+        std::cerr << "Right camera serial number not found in configuration." << std::endl;
+    }
+
+    return std::make_tuple(left_serial, right_serial);
 }
