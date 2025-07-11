@@ -187,12 +187,7 @@ std::vector<oc::ArgusDevice> ArgusBayerCapture::getArgusDevices()
       if (iSyncSensorCalibrationData){
         iSyncSensorCalibrationData->getSyncSensorModuleId(syncSensorId, sizeof(syncSensorId));
         
-        bool driver_post_1_x_x = driver_version.major > 1;
-        bool driver_post_1_2_x = driver_version.major == 1 && 
-            driver_version.minor > 2;
-        bool driver_post_1_2_0 = driver_version.major == 1 && 
-            driver_version.minor == 2 && driver_version.patch_rev > 0;
-        if(driver_post_1_x_x || driver_post_1_2_x || driver_post_1_2_0) {
+        if(driver_version.version > 120){
 
           char moduleSerialNumber[MAX_MODULE_STRING];
           iSyncSensorCalibrationData->getModuleSerialNumber(moduleSerialNumber,32);
@@ -217,7 +212,6 @@ std::vector<oc::ArgusDevice> ArgusBayerCapture::getArgusDevices()
           }
 
           unsigned char sn_d[4] = {0};
-          unsigned char identifier[3] = {0};
           memcpy(sn_d, moduleSerialNumber, 4);
           prop.serial_number = ParseUInt32(sn_d);
         }
