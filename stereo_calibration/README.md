@@ -21,6 +21,21 @@ float square_size = 25.0; // mm
 
 ![Opencv Checkerboard](./.assets/checkerboard_sample_count.png)
 
+## Usage
+
+```bash
+# Compile the application
+mkdir build && cd build
+cmake ..
+make
+
+# Open cameras by id
+./zedx_one_stereo_calibration <left_camera_id> <right_camera_id>
+
+# Open cameras by using the ZED_Media_Server configuration file
+./zedx_one_stereo_calibration /usr/local/zed/settings/virtual_xone_config.json
+```
+
 ## Perform the calibration
 
 The calibration process uses images saved manually with the chessboard visible and at different positions each time in the image.

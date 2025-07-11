@@ -4,6 +4,9 @@
 #include "ArgusComponent.hpp"
 #include <functional>
 #include <future>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
 
 #define SHARPEN_FACTOR 10.f
 #define DEFAULT_SHARPEN_VALUE 1
@@ -61,6 +64,58 @@ Argus::AcRegion convertACRegion(oc::Rect roi)
   return reg;
 }
 
+typedef struct DriverVersion{
+    int major=0;
+    int minor=0;
+    int patch_rev=0;
+    int version=0;
+};
+
+inline 
+int getDriverVersion(DriverVersion & driver_version){
+    std::string version;
+    std::ifstream file("/sys/module/sl_zedx/version");
+    memset(&driver_version,0,sizeof(driver_version));
+
+    if(!file.is_open()){
+        return -1;
+    }
+
+    getline (file, version);
+
+    std::stringstream ss(version);
+    std::vector<int> vect;
+    for (int i; ss >> i;) {
+        vect.push_back(i);    
+        if (ss.peek() == '.')
+            ss.ignore();
+    }
+
+    if(vect.empty() || vect.size() < 3){
+        file.close();
+        return -1;
+    }
+
+    driver_version.major = vect.at(0);
+    driver_version.minor = vect.at(1);
+    driver_version.patch_rev = vect.at(2);
+
+    driver_version.version = driver_version.major*100+
+        driver_version.minor*10+
+        driver_version.patch_rev;
+
+    file.close();
+
+    return 0;
+}
+
+inline 
+uint32_t ParseUInt32(const unsigned char (&buf)[4])
+{
+    uint32_t val;
+    std::memcpy((unsigned char*)&val,(unsigned char*)buf, 4);
+    return val;
+}
 
 std::vector<oc::ArgusDevice> ArgusBayerCapture::getArgusDevices()
 {
@@ -122,10 +177,45 @@ std::vector<oc::ArgusDevice> ArgusBayerCapture::getArgusDevices()
       oc::ArgusDevice prop;
       prop.id = k;
       prop.badge= iCameraProperties->getModuleString();
+
+      DriverVersion driver_version;
+      // driver version are not set by the driver pre 1.2.1 so we need to do the parsing for every version 
+      getDriverVersion(driver_version);
+
       char syncSensorId[MAX_MODULE_STRING];
       const Ext::ISyncSensorCalibrationData* iSyncSensorCalibrationData =interface_cast<const Ext::ISyncSensorCalibrationData>(device_);
-      if (iSyncSensorCalibrationData)
+      if (iSyncSensorCalibrationData){
         iSyncSensorCalibrationData->getSyncSensorModuleId(syncSensorId, sizeof(syncSensorId));
+        
+        if(driver_version.version > 120){
+
+          char moduleSerialNumber[MAX_MODULE_STRING];
+          iSyncSensorCalibrationData->getModuleSerialNumber(moduleSerialNumber,32);
+
+          uint8_t serial_num[4];
+          char tmp[3]= {0};
+
+          for(int i = 0 ; i<4; i++){
+              memcpy(tmp, &moduleSerialNumber[i*2], 2);
+              serial_num[i] = (uint8_t)strtol(tmp, NULL, 16);
+          }
+
+          prop.serial_number = *((int*)serial_num);
+
+        }else{
+          unsigned char moduleSerialNumber[MAX_MODULE_STRING];
+          iSyncSensorCalibrationData->getModuleSerialNumber(moduleSerialNumber,32);
+
+          //from ASCII char to actual value
+          for(int i=0; i < MAX_MODULE_STRING; i++) {
+              moduleSerialNumber[i] -= '0';
+          }
+
+          unsigned char sn_d[4] = {0};
+          memcpy(sn_d, moduleSerialNumber, 4);
+          prop.serial_number = ParseUInt32(sn_d);
+        }
+      }
       prop.name = std::string(syncSensorId);
       auto iCaptureSession = UniqueObj<CaptureSession>(iCameraProvider->createCaptureSession(devices_all->at(k),NULL));
       prop.available = iCaptureSession?true:false;
