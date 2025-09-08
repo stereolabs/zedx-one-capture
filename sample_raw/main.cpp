@@ -10,14 +10,16 @@
 int main(int argc, char *argv[]) {
 
     int camera_id_0 = 0;
-    int rq_width=0;
-    int rq_height=0;
-    int rq_fps = 0;
+    int rq_width=1920;
+    int rq_height=1200;
+    int rq_fps = 60;
+    int raw = 1;
 
     if (argc > 1) camera_id_0 = atoi(argv[1]);
     if (argc > 2) rq_width = atoi(argv[2]);
     if (argc > 3) rq_height = atoi(argv[3]);
     if (argc > 4) rq_fps = atoi(argv[4]);
+    if (argc > 5) raw = atoi(argv[5]);
 
     int major, minor, patch;
     oc::ArgusVirtualCapture::getVersion(major, minor, patch);
@@ -39,27 +41,40 @@ int main(int argc, char *argv[]) {
     config.mFPS = rq_fps;
     config.mWidth = rq_width;
     config.mHeight = rq_height;
-    config.mode = oc::PixelMode::RAW10; //RAW12 for 4K
+    if(raw ==1)
+      config.mode = oc::PixelMode::RAW10; //RAW12 for 4K
     config.verbose_level = 2;
 
     /// Open the camera
+    oc::ArgusVirtualCapture* pCamRaw;
     oc::ArgusV4l2Capture cam_raw;
-    oc::ARGUS_STATE state_cam0 = cam_raw.openCamera(config);
+    oc::ArgusBayerCapture cam_bayer;
+    oc::ARGUS_STATE state_cam0;
+
+    if(raw){
+      pCamRaw = &cam_raw;
+      state_cam0 = pCamRaw->openCamera(config);
+    }
+    else{
+      pCamRaw = &cam_bayer;
+      state_cam0 = pCamRaw->openCamera(config);
+    }
+
     if (state_cam0 != oc::ARGUS_STATE::OK) {
         std::cerr << "Failed to open Camera, error code " << ARGUS_STATE2str(state_cam0) << std::endl;
         return -1;
     }
 
-    std::cout<<" Creating Mat at resolution : "<<cam_raw.getHeight()<<cam_raw.getWidth()<<" PD : "<<cam_raw.getPixelDepth()<<std::endl;
-    cv::Mat rgb_cam0 = cv::Mat(cam_raw.getHeight(), cam_raw.getWidth(), CV_16UC1, 1);
+    std::cout<<" Creating Mat at resolution : "<<pCamRaw->getHeight()<<pCamRaw->getWidth()<<" PD : "<<pCamRaw->getPixelDepth()<<std::endl;
+    cv::Mat rgb_cam0 = cv::Mat(pCamRaw->getHeight(), pCamRaw->getWidth(), raw?CV_16UC1:CV_8UC4, 1);
 
     char key = ' ';
     while (key != 'q') {
-      if (cam_raw.isNewFrame()) {
+      if (pCamRaw->isNewFrame()) {
 
-        memcpy(rgb_cam0.data, cam_raw.getPixels(),
-               cam_raw.getWidth() * cam_raw.getHeight() *
-                   cam_raw.getNumberOfChannels()* cam_raw.getPixelDepth());
+        memcpy(rgb_cam0.data, pCamRaw->getPixels(),
+               pCamRaw->getWidth() * pCamRaw->getHeight() *
+                   pCamRaw->getNumberOfChannels()* pCamRaw->getPixelDepth());
         cv::imshow("Image RAW", rgb_cam0);
         key = cv::waitKey(2);
       }
