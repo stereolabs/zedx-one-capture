@@ -187,6 +187,7 @@ ARGUS_STATE ArgusV4l2Capture::openCamera(const ArgusCameraConfig &config,bool re
 
     /// This set ByPass mode -- needed especially if Argus API used before
     struct v4l2_ext_control ctrl;
+    memset(&ctrl, 0, sizeof(ctrl));
     ctrl.id = 0x009a2064;
     ctrl.value = 0;
     if (ioctl(ctx.cam_fd, VIDIOC_S_CTRL, &ctrl) < 0)
