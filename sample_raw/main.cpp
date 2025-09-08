@@ -49,17 +49,13 @@ int main(int argc, char *argv[]) {
     oc::ArgusVirtualCapture* pCamRaw;
     oc::ArgusV4l2Capture cam_raw;
     oc::ArgusBayerCapture cam_bayer;
-    oc::ARGUS_STATE state_cam0;
 
-    if(raw){
+    if(raw)
       pCamRaw = &cam_raw;
-      state_cam0 = pCamRaw->openCamera(config);
-    }
-    else{
+    else
       pCamRaw = &cam_bayer;
-      state_cam0 = pCamRaw->openCamera(config);
-    }
-
+  
+    oc::ARGUS_STATE state_cam0 = pCamRaw->openCamera(config);
     if (state_cam0 != oc::ARGUS_STATE::OK) {
         std::cerr << "Failed to open Camera, error code " << ARGUS_STATE2str(state_cam0) << std::endl;
         return -1;
