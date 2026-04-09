@@ -2037,11 +2037,13 @@ void ArgusBayerCapture::estimageRGGBGainFromColorTemperature_v2(uint32_t KelvinT
   for (c = 0; c < 3; c++)
     RGB[c] = RGB[c] / max;
 
-
-  //std::cout<<" RGB : "<<RGB[0]<<" , "<<RGB[1]<<" , "<<RGB[2]<<std::endl;
-
-  //rescale
-  double avg = (RGB[0]+RGB[1]+RGB[2])/3.0;
+  // Invert: WB gains must compensate for the illuminant, not match it.
+  // Channels that are strong under this illuminant need less gain, not more.
+  double min_val = RGB[0];
+  for (c = 1; c < 3; c++)
+    if (RGB[c] < min_val) min_val = RGB[c];
+  for (c = 0; c < 3; c++)
+    RGB[c] = min_val / RGB[c];
 
 
 
