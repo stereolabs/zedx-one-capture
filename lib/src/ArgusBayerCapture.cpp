@@ -1990,9 +1990,9 @@ void ArgusBayerCapture::estimageRGGBGainFromColorTemperature(uint32_t KelvinT, f
 }
 
 static const double XYZ_to_RGB[3][3] = {
-  { 3.24071,	-0.969258,  0.0556352 },
-  { -1.53726,	1.87599,    -0.203996 },
-  { -0.498571,	0.0415557,  1.05707 }
+  {  3.24071,  -1.53726,  -0.498571 },
+  { -0.969258,  1.87599,   0.0415557 },
+  {  0.0556352,-0.203996,  1.05707 }
 };
 
 
@@ -2024,7 +2024,7 @@ void ArgusBayerCapture::estimageRGGBGainFromColorTemperature_v2(uint32_t KelvinT
 
   // Fit for Blackbody using CIE standard observer function at 10 degrees
   //xD = -1.98883e9/(T*T*T) + 1.45155e6/(T*T) + 0.364774e3/T + 0.231136;
-  yD = -2.35563*xD*xD + 2.39688*xD - 0.196035;
+  //yD = -2.35563*xD*xD + 2.39688*xD - 0.196035;
 
   X = xD / yD;
   Y = 1;
