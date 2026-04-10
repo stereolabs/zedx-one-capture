@@ -2,6 +2,7 @@
 
 #include "ArgusCapture.hpp"
 #include "ArgusComponent.hpp"
+#include <algorithm>
 #include <functional>
 #include <future>
 #include <fstream>
@@ -955,6 +956,13 @@ void ArgusBayerCapture::produce()
               newImage.frameExposureTime = (iMetadata->getSensorExposureTime())/1000ULL; //Get in 1/100 ms
               newImage.frameAnalogGain = iMetadata->getSensorAnalogGain();
               newImage.frameDigitalGain = iMetadata->getIspDigitalGain();
+              {
+                BayerTuple<float> awbG = iMetadata->getAwbGains();
+                current_awb_gains[0] = awbG.r();
+                current_awb_gains[1] = awbG.gEven();
+                current_awb_gains[2] = awbG.gOdd();
+                current_awb_gains[3] = awbG.b();
+              }
               int c_res= convert((void*)iFrameLeft,newImage);
               if (c_res==0)
                 {
@@ -1990,9 +1998,9 @@ void ArgusBayerCapture::estimageRGGBGainFromColorTemperature(uint32_t KelvinT, f
 }
 
 static const double XYZ_to_RGB[3][3] = {
-  {  3.24071,  -1.53726,  -0.498571 },
-  { -0.969258,  1.87599,   0.0415557 },
-  {  0.0556352,-0.203996,  1.05707 }
+  { 3.24071,	-0.969258,  0.0556352 },
+  { -1.53726,	1.87599,    -0.203996 },
+  { -0.498571,	0.0415557,  1.05707 }
 };
 
 
@@ -2037,37 +2045,22 @@ void ArgusBayerCapture::estimageRGGBGainFromColorTemperature_v2(uint32_t KelvinT
   for (c = 0; c < 3; c++)
     RGB[c] = RGB[c] / max;
 
-  // Invert: WB gains must compensate for the illuminant, not match it.
-  // Channels that are strong under this illuminant need less gain, not more.
-  double min_val = RGB[0];
-  for (c = 1; c < 3; c++)
-    if (RGB[c] < min_val) min_val = RGB[c];
-  for (c = 0; c < 3; c++)
-    RGB[c] = min_val / RGB[c];
 
+  // WB correction: gains are inverse of illuminant color, normalized so
+  // the minimum gain is 1.0 (strongest channel unchanged, others boosted).
+  // Green gains are halved to compensate for the RGGB Bayer pattern having
+  // 2 green pixels per 4 (2x spatial contribution).
+  r = static_cast<float>(1.0 / RGB[0]);
+  g_even = static_cast<float>(0.5 / RGB[1]);
+  g_odd = static_cast<float>(0.5 / RGB[1]);
+  b = static_cast<float>(1.0 / RGB[2]);
 
-
-  r = RGB[0]*255;
-  g_even = RGB[1]*255;
-  g_odd = RGB[1]*255;
-  b = RGB[2]*255;
-
-
-  r/=127;
-  g_even/=127;
-  g_odd/=127;
-  b/=127;
-
-  float res_r = (r-1.0)/factor;
-  float res_g_even = (g_even-1.0)/(2*factor);//factor;
-  float res_g_odd = (g_odd-1.0)/(2*factor);
-  float res_b = (b-1.0)/factor;
-
-
-  r = 1.0+res_r;
-  g_even = 1.0+res_g_even;
-  g_odd = 1.0+res_g_odd;
-  b = 1.0+res_b;
+  // Normalize so minimum gain = 1.0
+  float min_gain = std::min({r, g_even, b});
+  r /= min_gain;
+  g_even /= min_gain;
+  g_odd /= min_gain;
+  b /= min_gain;
   return;
 
 }

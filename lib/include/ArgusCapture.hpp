@@ -842,7 +842,13 @@ class __attribute__((visibility("default"))) ArgusBayerCapture : public ArgusVir
     ///
     int getAutomaticWhiteBalanceStatus();
 
-
+    ///
+    /// \brief getAwbGains - read back the actual RGGB WB gains from capture metadata
+    /// \param gains: output array of 4 floats [R, G_even, G_odd, B]
+    ///
+    void getAwbGains(float gains[4]) {
+      for (int i = 0; i < 4; i++) gains[i] = current_awb_gains[i];
+    }
 
     //////////////////////////////////
     /////////// Sharpen //////////////
@@ -1017,6 +1023,7 @@ private:
     uint64_t current_exp_time = 0;
     float current_analog_gain = 0;
     float current_digital_gain =0;
+    float current_awb_gains[4] = {1,1,1,1};
 
     std::pair<float,float> analog_gain_limits_range;
     std::pair<float,float> digital_gain_limits_range;
