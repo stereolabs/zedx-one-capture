@@ -611,8 +611,19 @@ ARGUS_STATE ArgusBayerCapture::openCamera(const ArgusCameraConfig &config,bool r
       return ARGUS_STATE::INVALID_SOURCE_CONFIGURATION;
     }
 
-  // set stream resolution
-  status = iOutStreamSettings->setSourceClipRect(Argus::Rectangle<float>(0,0,1.f,1.f));
+  // set stream resolution. Clip rect is normalized [0,1] over the source frame
+  // (full frame = {0,0,1,1}); the clipped region is rescaled to mWidth x mHeight.
+  const bool clip_valid =
+      mConfig.mClipLeft >= 0.f && mConfig.mClipTop >= 0.f &&
+      mConfig.mClipRight <= 1.f && mConfig.mClipBottom <= 1.f &&
+      mConfig.mClipLeft < mConfig.mClipRight &&
+      mConfig.mClipTop < mConfig.mClipBottom;
+  if (!clip_valid) {
+      ArgusProvider::changeState(mPort,ARGUS_CAMERA_STATE::OFF);
+      return ARGUS_STATE::INVALID_SOURCE_CONFIGURATION;
+    }
+  status = iOutStreamSettings->setSourceClipRect(Argus::Rectangle<float>(
+      mConfig.mClipLeft, mConfig.mClipTop, mConfig.mClipRight, mConfig.mClipBottom));
   if (Argus::STATUS_OK != status) {
       return ARGUS_STATE::INVALID_SOURCE_CONFIGURATION;
     }

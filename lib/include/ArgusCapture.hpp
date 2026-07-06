@@ -109,6 +109,12 @@ public:
     PixelMode mode = PixelMode::COLOR_RGBA;
     bool hdr = false;
     bool mSwapRB = false; //swap for RGB(A) or BGR(A) output. Not available for RAW10
+    // Normalized ISP source-clip rect in [0,1] over the source frame; full frame = {0,0,1,1}.
+    // Clips the source and rescales it to mWidth x mHeight (ISP digital crop / zoom).
+    float mClipLeft = 0.f;
+    float mClipTop = 0.f;
+    float mClipRight = 1.f;
+    float mClipBottom = 1.f;
     int verbose_level = 0;
 };
 
