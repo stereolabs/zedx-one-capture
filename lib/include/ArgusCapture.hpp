@@ -105,6 +105,13 @@ public:
     uint32_t mDeviceId=0;
     uint32_t mWidth=0;
     uint32_t mHeight=0;
+    // Sensor-mode (source readout) resolution. 0 = use mWidth/mHeight (source ==
+    // output). Set larger than mWidth/mHeight to read the sensor at a higher
+    // resolution than the output stream, so an ISP source-clip yields a true 1:1
+    // crop instead of a digital zoom (e.g. sensor 3840x2160, output 1920x1080,
+    // centered clip -> native-detail center crop).
+    uint32_t mSensorWidth=0;
+    uint32_t mSensorHeight=0;
     uint32_t mFPS=0;
     PixelMode mode = PixelMode::COLOR_RGBA;
     bool hdr = false;
