@@ -958,10 +958,10 @@ void ArgusBayerCapture::produce()
               newImage.frameDigitalGain = iMetadata->getIspDigitalGain();
               {
                 BayerTuple<float> awbG = iMetadata->getAwbGains();
-                current_awb_gains[0] = awbG.r();
-                current_awb_gains[1] = awbG.gEven();
-                current_awb_gains[2] = awbG.gOdd();
-                current_awb_gains[3] = awbG.b();
+                newImage.frameAwbGains[0] = awbG.r();
+                newImage.frameAwbGains[1] = awbG.gEven();
+                newImage.frameAwbGains[2] = awbG.gOdd();
+                newImage.frameAwbGains[3] = awbG.b();
               }
               int c_res= convert((void*)iFrameLeft,newImage);
               if (c_res==0)
@@ -1053,6 +1053,10 @@ void ArgusBayerCapture::consume()
           current_exp_time = mNewImage.frameExposureTime;
           current_analog_gain= mNewImage.frameAnalogGain;
           current_digital_gain = mNewImage.frameDigitalGain;
+          current_awb_gains[0] = mNewImage.frameAwbGains[0];
+          current_awb_gains[1] = mNewImage.frameAwbGains[1];
+          current_awb_gains[2] = mNewImage.frameAwbGains[2];
+          current_awb_gains[3] = mNewImage.frameAwbGains[3];
           free(mNewImage.imageData);
           mCaptureQueue.pop_front();
           exitCriticalSection();
@@ -1407,7 +1411,7 @@ int ArgusBayerCapture::setManualWhiteBalance(uint32_t color_temperature_)
 
   Argus::IAutoControlSettings* ac = Argus::interface_cast<Argus::IAutoControlSettings>(interface_cast<IRequest>(h->capRequest)->getAutoControlSettings());
   float whiteBalanceGains[4]={0};
-  estimageRGGBGainFromColorTemperature_v2(color_temperature_,1.5,whiteBalanceGains[0],whiteBalanceGains[1],whiteBalanceGains[2],whiteBalanceGains[3]);
+  estimageRGGBGainFromColorTemperature_v2(color_temperature_,whiteBalanceGains[0],whiteBalanceGains[1],whiteBalanceGains[2],whiteBalanceGains[3]);
   color_temperature = color_temperature_;
   isManualWhiteBalance = true;
   Argus::Status status = Argus::STATUS_DISCONNECTED;
@@ -2005,7 +2009,7 @@ static const double XYZ_to_RGB[3][3] = {
 
 
 //Based on https://github.com/sergiomb2/ufraw/blob/1aec313/ufraw_routines.c#L246-L294
-void ArgusBayerCapture::estimageRGGBGainFromColorTemperature_v2(uint32_t KelvinT, float factor,float& r, float &g_even,float&g_odd,float &b)
+void ArgusBayerCapture::estimageRGGBGainFromColorTemperature_v2(uint32_t KelvinT, float& r, float &g_even,float&g_odd,float &b)
 {
   int c;
   float RGB[3];
@@ -2037,13 +2041,19 @@ void ArgusBayerCapture::estimageRGGBGainFromColorTemperature_v2(uint32_t KelvinT
   X = xD / yD;
   Y = 1;
   Z = (1 - xD - yD) / yD;
+  // Small epsilon guards against division by zero / non-positive channels that
+  // can arise for out-of-gamut white points after the XYZ->RGB transform.
+  const double eps = 1e-6;
   max = 0;
   for (c = 0; c < 3; c++) {
       RGB[c] = X * XYZ_to_RGB[0][c] + Y * XYZ_to_RGB[1][c] + Z * XYZ_to_RGB[2][c];
       if (RGB[c] > max) max = RGB[c];
     }
-  for (c = 0; c < 3; c++)
+  if (max < eps) max = eps;
+  for (c = 0; c < 3; c++) {
     RGB[c] = RGB[c] / max;
+    if (RGB[c] < eps) RGB[c] = eps;
+  }
 
 
   // WB correction: gains are inverse of illuminant color, normalized so
@@ -2057,6 +2067,7 @@ void ArgusBayerCapture::estimageRGGBGainFromColorTemperature_v2(uint32_t KelvinT
 
   // Normalize so minimum gain = 1.0
   float min_gain = std::min({r, g_even, b});
+  if (min_gain < eps) min_gain = eps;
   r /= min_gain;
   g_even /= min_gain;
   g_odd /= min_gain;

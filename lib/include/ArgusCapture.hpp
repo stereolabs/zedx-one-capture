@@ -117,6 +117,7 @@ typedef struct {
     uint64_t frameExposureTime =0; // in us
     float frameAnalogGain =0;
     float frameDigitalGain= 0;
+    float frameAwbGains[4] = {1,1,1,1}; // [R, G_even, G_odd, B]
     int pitch = 0;
     uint8_t *imageData = nullptr;
 } argusMonoImage;
@@ -846,7 +847,11 @@ class __attribute__((visibility("default"))) ArgusBayerCapture : public ArgusVir
     /// \brief getAwbGains - read back the actual RGGB WB gains from capture metadata
     /// \param gains: output array of 4 floats [R, G_even, G_odd, B]
     ///
-    void getAwbGains(float gains[4]) {
+    void getAwbGains(float gains[4]) const {
+      if (!opened_) {
+        for (int i = 0; i < 4; i++) gains[i] = 0.0f;
+        return;
+      }
       for (int i = 0; i < 4; i++) gains[i] = current_awb_gains[i];
     }
 
@@ -1046,7 +1051,7 @@ private:
     void unlock();
     int dump_dmabuf(int dmabuf_fd, unsigned int plane, argusMonoImage &image);
     void estimageRGGBGainFromColorTemperature(uint32_t KelvinT, float factor, float& r, float &g_even, float&g_odd, float &b);
-    void estimageRGGBGainFromColorTemperature_v2(uint32_t KelvinT, float factor, float& r, float &g_even, float&g_odd, float &b);
+    void estimageRGGBGainFromColorTemperature_v2(uint32_t KelvinT, float& r, float &g_even, float&g_odd, float &b);
     int convert(void* iframe, argusMonoImage &image);
     void clearBuffers();
     void clearImageQueues();
