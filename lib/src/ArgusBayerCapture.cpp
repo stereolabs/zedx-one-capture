@@ -420,15 +420,24 @@ ARGUS_STATE ArgusBayerCapture::openCamera(const ArgusCameraConfig &config,bool r
     }
 
 
-  //2. Find sensor mode according to width/height. If width or height = 0, choose the first / default sensor mode
+  //2. Find sensor mode. The sensor mode (source readout) is selected by
+  //   mSensorWidth/mSensorHeight when set (>0), otherwise by mWidth/mHeight.
+  //   The output stream stays at mWidth/mHeight, so a larger sensor mode plus an
+  //   ISP source-clip gives a true 1:1 crop instead of a digital zoom. If the
+  //   sensor target or the output is 0, choose the first / default sensor mode.
+  const uint32_t sensor_target_w =
+      mConfig.mSensorWidth > 0 ? mConfig.mSensorWidth : mConfig.mWidth;
+  const uint32_t sensor_target_h =
+      mConfig.mSensorHeight > 0 ? mConfig.mSensorHeight : mConfig.mHeight;
   int m_sensor_mode = -1;
-  if (mConfig.mWidth==0 || mConfig.mHeight == 0)
+  if (sensor_target_w==0 || sensor_target_h == 0)
   {
       //Take the first sensor mode
       m_sensor_mode = 0;
       ISensorMode* ssmode = Argus::interface_cast<Argus::ISensorMode>(sensorModes[m_sensor_mode]);
-      mConfig.mWidth = ssmode->getResolution().width();
-      mConfig.mHeight = ssmode->getResolution().height();
+      // Default the output size to the sensor mode when it was left unspecified.
+      if (mConfig.mWidth==0)  mConfig.mWidth = ssmode->getResolution().width();
+      if (mConfig.mHeight==0) mConfig.mHeight = ssmode->getResolution().height();
       if (mConfig.mFPS==0)
           mConfig.mFPS = ONE_SECOND_NANOS/ssmode->getFrameDurationRange().min();
 
@@ -446,7 +455,7 @@ ARGUS_STATE ArgusBayerCapture::openCamera(const ArgusCameraConfig &config,bool r
 
       if(mConfig.hdr)
       {
-          if (mConfig.mWidth==s_width && mConfig.mHeight == s_height && hdr_ratio_max > 1)
+          if (sensor_target_w==s_width && sensor_target_h == s_height && hdr_ratio_max > 1)
             {
               m_sensor_mode = k;
               if (mConfig.mFPS==0)
@@ -456,7 +465,7 @@ ARGUS_STATE ArgusBayerCapture::openCamera(const ArgusCameraConfig &config,bool r
       }
       else
       {
-          if (mConfig.mWidth==s_width && mConfig.mHeight == s_height )
+          if (sensor_target_w==s_width && sensor_target_h == s_height )
             {
               m_sensor_mode = k;
               if (mConfig.mFPS==0)
@@ -612,8 +621,19 @@ ARGUS_STATE ArgusBayerCapture::openCamera(const ArgusCameraConfig &config,bool r
       return ARGUS_STATE::INVALID_SOURCE_CONFIGURATION;
     }
 
-  // set stream resolution
-  status = iOutStreamSettings->setSourceClipRect(Argus::Rectangle<float>(0,0,1.f,1.f));
+  // set stream resolution. Clip rect is normalized [0,1] over the source frame
+  // (full frame = {0,0,1,1}); the clipped region is rescaled to mWidth x mHeight.
+  const bool clip_valid =
+      mConfig.mClipLeft >= 0.f && mConfig.mClipTop >= 0.f &&
+      mConfig.mClipRight <= 1.f && mConfig.mClipBottom <= 1.f &&
+      mConfig.mClipLeft < mConfig.mClipRight &&
+      mConfig.mClipTop < mConfig.mClipBottom;
+  if (!clip_valid) {
+      ArgusProvider::changeState(mPort,ARGUS_CAMERA_STATE::OFF);
+      return ARGUS_STATE::INVALID_SOURCE_CONFIGURATION;
+    }
+  status = iOutStreamSettings->setSourceClipRect(Argus::Rectangle<float>(
+      mConfig.mClipLeft, mConfig.mClipTop, mConfig.mClipRight, mConfig.mClipBottom));
   if (Argus::STATUS_OK != status) {
       return ARGUS_STATE::INVALID_SOURCE_CONFIGURATION;
     }
