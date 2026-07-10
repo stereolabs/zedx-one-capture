@@ -2058,11 +2058,20 @@ void ArgusBayerCapture::estimageRGGBGainFromColorTemperature_v2(uint32_t KelvinT
 
   // WB correction: gains are inverse of illuminant color, normalized so
   // the minimum gain is 1.0 (strongest channel unchanged, others boosted).
-  // Green gains are halved to compensate for the RGGB Bayer pattern having
-  // 2 green pixels per 4 (2x spatial contribution).
+  // Green needs a per-sensor bias: the imx678 (4K) has a green-dominant raw
+  // response, so its green gain is halved to avoid a green cast; other sensors
+  // (e.g. the GS variant) use unity and would green-cast if halved.
+  std::string sensorBadge;
+  if (h && h->cameraDevice) {
+    Argus::ICameraProperties *iCameraProperties = Argus::interface_cast<Argus::ICameraProperties>(h->cameraDevice);
+    if (iCameraProperties) sensorBadge = iCameraProperties->getModuleString();
+  }
+  const bool isImx678 = (sensorBadge == "zedx_imx678");
+  const float sensorGreenBias = isImx678 ? 0.5f : 1.0f;
+
   r = static_cast<float>(1.0 / RGB[0]);
-  g_even = static_cast<float>(0.5 / RGB[1]);
-  g_odd = static_cast<float>(0.5 / RGB[1]);
+  g_even = static_cast<float>(sensorGreenBias / RGB[1]);
+  g_odd = static_cast<float>(sensorGreenBias / RGB[1]);
   b = static_cast<float>(1.0 / RGB[2]);
 
   // Normalize so minimum gain = 1.0
