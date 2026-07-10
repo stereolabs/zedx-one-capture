@@ -2,6 +2,7 @@
 
 #include "ArgusCapture.hpp"
 #include "ArgusComponent.hpp"
+#include <algorithm>
 #include <functional>
 #include <future>
 #include <fstream>
@@ -955,6 +956,13 @@ void ArgusBayerCapture::produce()
               newImage.frameExposureTime = (iMetadata->getSensorExposureTime())/1000ULL; //Get in 1/100 ms
               newImage.frameAnalogGain = iMetadata->getSensorAnalogGain();
               newImage.frameDigitalGain = iMetadata->getIspDigitalGain();
+              {
+                BayerTuple<float> awbG = iMetadata->getAwbGains();
+                newImage.frameAwbGains[0] = awbG.r();
+                newImage.frameAwbGains[1] = awbG.gEven();
+                newImage.frameAwbGains[2] = awbG.gOdd();
+                newImage.frameAwbGains[3] = awbG.b();
+              }
               int c_res= convert((void*)iFrameLeft,newImage);
               if (c_res==0)
                 {
@@ -1045,6 +1053,10 @@ void ArgusBayerCapture::consume()
           current_exp_time = mNewImage.frameExposureTime;
           current_analog_gain= mNewImage.frameAnalogGain;
           current_digital_gain = mNewImage.frameDigitalGain;
+          current_awb_gains[0] = mNewImage.frameAwbGains[0];
+          current_awb_gains[1] = mNewImage.frameAwbGains[1];
+          current_awb_gains[2] = mNewImage.frameAwbGains[2];
+          current_awb_gains[3] = mNewImage.frameAwbGains[3];
           free(mNewImage.imageData);
           mCaptureQueue.pop_front();
           exitCriticalSection();
@@ -1399,7 +1411,7 @@ int ArgusBayerCapture::setManualWhiteBalance(uint32_t color_temperature_)
 
   Argus::IAutoControlSettings* ac = Argus::interface_cast<Argus::IAutoControlSettings>(interface_cast<IRequest>(h->capRequest)->getAutoControlSettings());
   float whiteBalanceGains[4]={0};
-  estimageRGGBGainFromColorTemperature_v2(color_temperature_,1.5,whiteBalanceGains[0],whiteBalanceGains[1],whiteBalanceGains[2],whiteBalanceGains[3]);
+  estimageRGGBGainFromColorTemperature_v2(color_temperature_,whiteBalanceGains[0],whiteBalanceGains[1],whiteBalanceGains[2],whiteBalanceGains[3]);
   color_temperature = color_temperature_;
   isManualWhiteBalance = true;
   Argus::Status status = Argus::STATUS_DISCONNECTED;
@@ -1997,7 +2009,7 @@ static const double XYZ_to_RGB[3][3] = {
 
 
 //Based on https://github.com/sergiomb2/ufraw/blob/1aec313/ufraw_routines.c#L246-L294
-void ArgusBayerCapture::estimageRGGBGainFromColorTemperature_v2(uint32_t KelvinT, float factor,float& r, float &g_even,float&g_odd,float &b)
+void ArgusBayerCapture::estimageRGGBGainFromColorTemperature_v2(uint32_t KelvinT, float& r, float &g_even,float&g_odd,float &b)
 {
   int c;
   float RGB[3];
@@ -2024,48 +2036,51 @@ void ArgusBayerCapture::estimageRGGBGainFromColorTemperature_v2(uint32_t KelvinT
 
   // Fit for Blackbody using CIE standard observer function at 10 degrees
   //xD = -1.98883e9/(T*T*T) + 1.45155e6/(T*T) + 0.364774e3/T + 0.231136;
-  yD = -2.35563*xD*xD + 2.39688*xD - 0.196035;
+  //yD = -2.35563*xD*xD + 2.39688*xD - 0.196035;
 
   X = xD / yD;
   Y = 1;
   Z = (1 - xD - yD) / yD;
+  // Small epsilon guards against division by zero / non-positive channels that
+  // can arise for out-of-gamut white points after the XYZ->RGB transform.
+  const double eps = 1e-6;
   max = 0;
   for (c = 0; c < 3; c++) {
       RGB[c] = X * XYZ_to_RGB[0][c] + Y * XYZ_to_RGB[1][c] + Z * XYZ_to_RGB[2][c];
       if (RGB[c] > max) max = RGB[c];
     }
-  for (c = 0; c < 3; c++)
+  if (max < eps) max = eps;
+  for (c = 0; c < 3; c++) {
     RGB[c] = RGB[c] / max;
+    if (RGB[c] < eps) RGB[c] = eps;
+  }
 
 
-  //std::cout<<" RGB : "<<RGB[0]<<" , "<<RGB[1]<<" , "<<RGB[2]<<std::endl;
+  // WB correction: gains are inverse of illuminant color, normalized so
+  // the minimum gain is 1.0 (strongest channel unchanged, others boosted).
+  // Green needs a per-sensor bias: the imx678 (4K) has a green-dominant raw
+  // response, so its green gain is halved to avoid a green cast; other sensors
+  // (e.g. the GS variant) use unity and would green-cast if halved.
+  std::string sensorBadge;
+  if (h && h->cameraDevice) {
+    Argus::ICameraProperties *iCameraProperties = Argus::interface_cast<Argus::ICameraProperties>(h->cameraDevice);
+    if (iCameraProperties) sensorBadge = iCameraProperties->getModuleString();
+  }
+  const bool isImx678 = (sensorBadge == "zedx_imx678");
+  const float sensorGreenBias = isImx678 ? 0.5f : 1.0f;
 
-  //rescale
-  double avg = (RGB[0]+RGB[1]+RGB[2])/3.0;
+  r = static_cast<float>(1.0 / RGB[0]);
+  g_even = static_cast<float>(sensorGreenBias / RGB[1]);
+  g_odd = static_cast<float>(sensorGreenBias / RGB[1]);
+  b = static_cast<float>(1.0 / RGB[2]);
 
-
-
-  r = RGB[0]*255;
-  g_even = RGB[1]*255;
-  g_odd = RGB[1]*255;
-  b = RGB[2]*255;
-
-
-  r/=127;
-  g_even/=127;
-  g_odd/=127;
-  b/=127;
-
-  float res_r = (r-1.0)/factor;
-  float res_g_even = (g_even-1.0)/(2*factor);//factor;
-  float res_g_odd = (g_odd-1.0)/(2*factor);
-  float res_b = (b-1.0)/factor;
-
-
-  r = 1.0+res_r;
-  g_even = 1.0+res_g_even;
-  g_odd = 1.0+res_g_odd;
-  b = 1.0+res_b;
+  // Normalize so minimum gain = 1.0
+  float min_gain = std::min({r, g_even, b});
+  if (min_gain < eps) min_gain = eps;
+  r /= min_gain;
+  g_even /= min_gain;
+  g_odd /= min_gain;
+  b /= min_gain;
   return;
 
 }
